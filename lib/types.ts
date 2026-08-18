@@ -97,3 +97,34 @@ export interface AppData {
   statuses: StatusDefinition[];
   users: User[];
 }
+
+export type NoteBlockType = "text" | "heading" | "markdown" | "checklist" | "quote" | "code";
+
+export interface NoteBlock {
+  id: string;
+  type: NoteBlockType;
+  content: string;
+  checked?: boolean;
+}
+
+export interface NoteFolder {
+  id: string;
+  name: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NoteFile {
+  id: string;
+  folderId: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotesData {
+  folders: NoteFolder[];
+  notes: NoteFile[];
+}

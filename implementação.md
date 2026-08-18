@@ -142,6 +142,8 @@ Utilizar uma barra de navegação compacta, centralizada na parte inferior, cont
 
 A barra deve possuir um botão para ser escondida. Quando estiver fechada, manter um controle discreto para mostrá-la novamente e guardar a preferência no navegador.
 
+O controle de esconder deve ficar centralizado abaixo dos itens da barra, e não ao lado. O item selecionado deve ser indicado apenas pela cor e pelo fundo, sem ponto inferior.
+
 A barra deve flutuar sobre o conteúdo da página. Na tela de tickets, ela deve sobrepor o `tbody` sem reduzir ou alterar a altura disponível para a tabela, esteja visível ou escondida.
 
 No menu do usuário no header:
@@ -337,6 +339,8 @@ Textarea.
 ### Responsáveis
 
 Seleção múltipla de usuários, exigindo ao menos um responsável.
+
+Ao abrir o cadastro, selecionar inicialmente o próprio usuário autenticado como responsável.
 
 ### Data de recebimento
 

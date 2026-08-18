@@ -18,6 +18,32 @@ alter table users add column if not exists avatar_mime varchar(50) null;
 alter table users add column if not exists avatar_updated_at timestamp null;
 alter table users drop column if exists role;
 
+create table if not exists note_folders (
+  id char(36) primary key,
+  user_id char(36) not null,
+  name varchar(120) not null,
+  position int not null default 0,
+  created_at timestamp not null default current_timestamp,
+  updated_at timestamp not null default current_timestamp on update current_timestamp,
+  constraint fk_note_folders_user foreign key (user_id) references users(id) on delete cascade,
+  unique key uq_note_folders_user_name (user_id, name),
+  index idx_note_folders_user (user_id, position, created_at)
+) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+
+create table if not exists notes (
+  id char(36) primary key,
+  folder_id char(36) not null,
+  user_id char(36) not null,
+  title varchar(180) not null,
+  content longtext not null,
+  created_at timestamp not null default current_timestamp,
+  updated_at timestamp not null default current_timestamp on update current_timestamp,
+  constraint fk_notes_folder foreign key (folder_id) references note_folders(id) on delete cascade,
+  constraint fk_notes_user foreign key (user_id) references users(id) on delete cascade,
+  index idx_notes_folder (folder_id, updated_at),
+  index idx_notes_user (user_id, updated_at)
+) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+
 create table if not exists systems (
   id varchar(64) primary key,
   name varchar(100) not null unique,

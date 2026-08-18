@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
-import { BarChart3, ChevronDown, ChevronUp, LogOut, Plus, Search, Settings, Ticket, UserRound } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronUp, LogOut, NotebookPen, Plus, Search, Settings, Ticket, UserRound } from "lucide-react";
 import { useApp } from "@/components/providers/app-provider";
 import { Avatar } from "@/components/ui/avatar";
 import { Toast } from "@/components/ui/toast";
@@ -13,6 +13,7 @@ import { TicketDrawer } from "@/components/tickets/ticket-drawer";
 const nav = [
   { href: "/", label: "Dashboard", icon: BarChart3 },
   { href: "/tickets", label: "Tickets", icon: Ticket },
+  { href: "/anotacoes", label: "Anotações", icon: NotebookPen },
   { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
@@ -71,7 +72,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
-        <main className={`main-content ${pathname.startsWith("/tickets") ? "tickets-main" : ""}`}>{children}</main>
+        <main className={`main-content ${pathname.startsWith("/tickets") ? "tickets-main" : pathname.startsWith("/anotacoes") ? "notes-main" : ""}`}>{children}</main>
       </div>
       {dockVisible ? (
         <nav className="bottom-dock" aria-label="Navegação principal">

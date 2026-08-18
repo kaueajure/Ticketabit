@@ -20,7 +20,7 @@ const emptyForm = (): TicketInput => ({
 });
 
 export function TicketFormModal() {
-  const { ticketModalOpen, closeNewTicket, systems, categories, statuses, users, createTicket } = useApp();
+  const { ticketModalOpen, closeNewTicket, systems, categories, statuses, users, currentUser, createTicket } = useApp();
   const [form, setForm] = useState<TicketInput>(emptyForm());
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -32,11 +32,11 @@ export function TicketFormModal() {
         systemId: systems.find((item) => item.active)?.id ?? "",
         status: statuses.find((item) => item.active)?.name ?? "Não iniciado",
         categoryId: categories.find((item) => item.active)?.id ?? "",
-        responsibleIds: users.find((item) => item.active)?.id ? [users.find((item) => item.active)!.id] : [],
+        responsibleIds: currentUser ? [currentUser.id] : [],
       });
       setError("");
     }
-  }, [ticketModalOpen, systems, categories, statuses, users]);
+  }, [ticketModalOpen, systems, categories, statuses, currentUser]);
 
   if (!ticketModalOpen) return null;
 
