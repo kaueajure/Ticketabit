@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ReactNode, useState } from "react";
-import { BarChart3, LogOut, Plus, Search, Settings, Ticket, UserRound } from "lucide-react";
+import { ReactNode, useEffect, useState } from "react";
+import { BarChart3, ChevronDown, ChevronUp, LogOut, Plus, Search, Settings, Ticket, UserRound } from "lucide-react";
 import { useApp } from "@/components/providers/app-provider";
 import { Avatar } from "@/components/ui/avatar";
 import { Toast } from "@/components/ui/toast";
@@ -21,6 +21,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { currentUser, loading, loadError, reloadData, openNewTicket, globalSearch, setGlobalSearch } = useApp();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [dockVisible, setDockVisible] = useState(true);
+
+  useEffect(() => {
+    setDockVisible(window.localStorage.getItem("ticketabit:dock-visible") !== "false");
+  }, []);
+
+  const changeDockVisibility = (visible: boolean) => {
+    setDockVisible(visible);
+    window.localStorage.setItem("ticketabit:dock-visible", String(visible));
+  };
 
   const onSearch = (value: string) => {
     setGlobalSearch(value);
@@ -34,7 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${dockVisible ? "" : "dock-hidden"}`}>
       <div className="app-content">
         <header className="topbar">
           <Link href="/" className="topbar-brand" aria-label="Ir para o dashboard">
@@ -61,19 +71,29 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
-        <main className="main-content">{children}</main>
+        <main className={`main-content ${pathname.startsWith("/tickets") ? "tickets-main" : ""}`}>{children}</main>
       </div>
-      <nav className="bottom-dock" aria-label="Navegação principal">
-        {nav.map(({ href, label, icon: Icon }) => {
-          const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
-          return (
-            <Link href={href} key={href} className={`dock-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>
-              <Icon size={18} strokeWidth={1.9} />
-              <span>{label}</span>
-            </Link>
-          );
-        })}
-      </nav>
+      {dockVisible ? (
+        <nav className="bottom-dock" aria-label="Navegação principal">
+          {nav.map(({ href, label, icon: Icon }) => {
+            const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+            return (
+              <Link href={href} key={href} className={`dock-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>
+                <Icon size={18} strokeWidth={1.9} />
+                <span>{label}</span>
+              </Link>
+            );
+          })}
+          <button className="dock-visibility-toggle" onClick={() => changeDockVisibility(false)} aria-label="Esconder barra de navegação" title="Esconder barra">
+            <ChevronDown size={17} />
+          </button>
+        </nav>
+      ) : (
+        <button className="dock-show-button" onClick={() => changeDockVisibility(true)} aria-label="Mostrar barra de navegação" title="Mostrar barra de navegação">
+          <ChevronUp size={17} />
+          <span>Mostrar navegação</span>
+        </button>
+      )}
       <button className="mobile-new-ticket" onClick={openNewTicket} aria-label="Novo ticket"><Plus size={23} /></button>
       <TicketFormModal />
       <TicketDrawer />

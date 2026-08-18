@@ -134,13 +134,17 @@ O sistema deve comportar bastante informação na tela.
 
 Criar uma estrutura extremamente simples.
 
-Sidebar pequena ou navegação lateral contendo:
+Utilizar uma barra de navegação compacta, centralizada na parte inferior, contendo:
 
 * Dashboard
 * Tickets
 * Configurações
 
-No final da sidebar:
+A barra deve possuir um botão para ser escondida. Quando estiver fechada, manter um controle discreto para mostrá-la novamente e guardar a preferência no navegador.
+
+A barra deve flutuar sobre o conteúdo da página. Na tela de tickets, ela deve sobrepor o `tbody` sem reduzir ou alterar a altura disponível para a tabela, esteja visível ou escondida.
+
+No menu do usuário no header:
 
 * usuário logado;
 * configurações da conta;
@@ -505,25 +509,9 @@ Responsável ↑
 
 ---
 
-# 17. Paginação
+# 17. Rolagem dos tickets
 
-Não carregar centenas de registros de uma vez.
-
-Criar paginação simples.
-
-Exemplo:
-
-`1–25 de 187 tickets`
-
-Anterior | Próxima
-
-Possibilidade de selecionar:
-
-* 25
-* 50
-* 100
-
-tickets por página.
+Não criar paginação na lista de tickets. Mostrar todos os registros correspondentes aos filtros dentro da área fixa da tabela e utilizar rolagem interna no `tbody`.
 
 ---
 
@@ -583,6 +571,8 @@ Não adicionar gráficos inicialmente.
 
 Na página de tickets, acima da tabela, pode existir uma pequena linha:
 
+`Execução 43`
+
 `Todos 187`
 
 `Em atendimento 14`
@@ -594,6 +584,8 @@ Na página de tickets, acima da tabela, pode existir uma pequena linha:
 `Finalizados 144`
 
 Clicar em um contador aplica automaticamente o filtro correspondente.
+
+**Execução** deve ser o primeiro contador e o filtro selecionado por padrão. Ele reúne todos os tickets cujo status não esteja configurado como finalizado.
 
 ---
 
@@ -1032,6 +1024,10 @@ Cabeçalho:
 * texto pequeno;
 * sem excesso de contraste;
 * posição sticky durante scroll.
+
+Na página de tickets, o conjunto de filtros e tabela deve ocupar uma área fixa dentro do container principal. A página não deve possuir rolagem própria: somente as linhas da tabela devem rolar, mantendo cabeçalho e filtros visíveis.
+
+A listagem deve aproveitar praticamente toda a largura do container principal, mantendo apenas uma margem externa pequena e uniforme.
 
 Linhas:
 
