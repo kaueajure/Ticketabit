@@ -765,6 +765,27 @@ Ao tocar, abrir os detalhes.
 
 ---
 
+# 25.1. Anotações
+
+Adicionar uma página **Anotações** à barra de navegação principal.
+
+Cada usuário deve possuir seu próprio espaço de anotações no banco de dados. O usuário pode:
+
+* criar, renomear e excluir pastas;
+* criar vários arquivos de texto dentro de cada pasta;
+* mover um arquivo para outra pasta;
+* editar o nome e o conteúdo do arquivo;
+* combinar blocos de texto normal, título, Markdown, checklist, citação e código;
+* reordenar e excluir blocos;
+* visualizar uma prévia segura do Markdown;
+* salvar com botão ou pelo atalho `Ctrl/Cmd + S`.
+
+A exclusão de uma pasta deve pedir confirmação e excluir também seus arquivos. As anotações não devem ser mockadas nem armazenadas somente no navegador.
+
+Em celulares, mostrar uma etapa por vez: pastas → arquivos → editor.
+
+---
+
 # 26. Banco de dados
 
 Criar estrutura simples e normalizada.
@@ -799,6 +820,27 @@ Entidades principais:
 * user_id
 
 Um ticket pode possuir um ou vários responsáveis.
+
+## note_folders
+
+* id
+* user_id
+* name
+* position
+* created_at
+* updated_at
+
+## notes
+
+* id
+* folder_id
+* user_id
+* title
+* content
+* created_at
+* updated_at
+
+O conteúdo da anotação guarda os blocos estruturados em JSON dentro de um campo de texto longo. Pastas e arquivos pertencem ao usuário autenticado.
 
 ## systems
 
@@ -863,12 +905,12 @@ Preferência:
 
 ### Backend/banco
 
-* Supabase
-* PostgreSQL
+* rotas do Next.js
+* MySQL 8 ou MariaDB compatível com a Hostinger
 
 ### Autenticação
 
-* Supabase Auth
+* sessão própria assinada em cookie `httpOnly`
 
 Evitar adicionar bibliotecas sem necessidade.
 

@@ -1,6 +1,6 @@
 # Ticketabit
 
-Sistema de gestão interna de tickets com Next.js, TypeScript, autenticação própria e banco MySQL. A aplicação não utiliza dados fictícios nem `localStorage`: tickets, usuários, histórico e configurações são lidos e gravados no banco.
+Sistema de gestão interna de tickets e anotações com Next.js, TypeScript, autenticação própria e banco MySQL. A aplicação não utiliza dados fictícios: tickets, anotações, usuários, histórico e configurações são lidos e gravados no banco. O `localStorage` é usado somente para preferências visuais, como mostrar ou esconder a navegação inferior.
 
 ## Requisitos
 
@@ -61,7 +61,10 @@ O arquivo `database/schema.sql` contém as tabelas:
 - `categories`;
 - `statuses`;
 - `tickets`;
+- `ticket_responsibles`;
 - `ticket_history`.
+- `note_folders`;
+- `notes`.
 
 As senhas são armazenadas apenas como hash bcrypt. A autenticação gera uma sessão assinada em cookie `httpOnly`, `SameSite=Lax` e `Secure` em produção.
 Todos os usuários possuem as mesmas permissões no sistema.
