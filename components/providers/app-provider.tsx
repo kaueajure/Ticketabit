@@ -2,6 +2,7 @@
 
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import { AppData, Category, StatusDefinition, SystemItem, Ticket, TicketInput, User } from "@/lib/types";
+import { readApiJson } from "@/lib/client-http";
 
 type Entity = SystemItem | Category | StatusDefinition | User;
 type EntityType = "systems" | "categories" | "statuses" | "users";
@@ -56,7 +57,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         window.location.replace(`/login?next=${encodeURIComponent(window.location.pathname)}`);
         return;
       }
-      const result = await response.json();
+      if (response.redirected && new URL(response.url).pathname === "/login") {
+        window.location.replace(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+        return;
+      }
+      const result = await readApiJson<AppData & { currentUser: User; error?: string }>(response);
       if (!response.ok) throw new Error(result.error ?? "Não foi possível carregar os dados.");
       const { currentUser: authenticatedUser, ...appData } = result;
       setData(appData as AppData);

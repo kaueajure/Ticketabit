@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { Eye, EyeOff, LockKeyhole, Mail, Ticket } from "lucide-react";
+import { readApiJson } from "@/lib/client-http";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -20,7 +21,7 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const result = await response.json();
+      const result = await readApiJson<{ ok?: boolean; error?: string }>(response);
       if (!response.ok) throw new Error(result.error ?? "Não foi possível entrar.");
       const next = new URLSearchParams(window.location.search).get("next");
       window.location.replace(next?.startsWith("/") && !next.startsWith("//") ? next : "/");
