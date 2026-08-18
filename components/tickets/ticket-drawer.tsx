@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarDays, Check, Clock3, MoreHorizontal, Trash2, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { CalendarDays, Clock3, Trash2, X } from "lucide-react";
 import { useApp } from "@/components/providers/app-provider";
-import { STATUSES, TicketStatus } from "@/lib/types";
+import { TicketStatus } from "@/lib/types";
 import { formatDate, relativeTime } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
-import { StatusBadge, CategoryBadge } from "@/components/ui/status-badge";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ResponsiblePicker } from "@/components/tickets/responsible-picker";
 
 export function TicketDrawer() {
-  const { selectedTicketId, closeTicket, tickets, systems, categories, users, stages, updateTicket, deleteTicket } = useApp();
+  const { selectedTicketId, closeTicket, tickets, systems, categories, statuses, users, updateTicket, deleteTicket } = useApp();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const ticket = tickets.find((item) => item.id === selectedTicketId);
@@ -23,47 +25,39 @@ export function TicketDrawer() {
 
   if (!selectedTicketId || !ticket) return null;
 
-  const system = systems.find((item) => item.id === ticket.systemId);
-  const category = categories.find((item) => item.id === ticket.categoryId);
-  const responsible = users.find((item) => item.id === ticket.responsibleId);
+  const responsibles = users.filter((item) => ticket.responsibleIds.includes(item.id));
   const creator = users.find((item) => item.id === ticket.createdBy);
+  const currentStatus = statuses.find((item) => item.name === ticket.status);
+  const lastUpdaterName = ticket.history.at(-1)?.userName ?? responsibles[0]?.name ?? "Usuário";
+  const lastUpdater = users.find((item) => item.name === lastUpdaterName);
 
-  return (
-    <div className="drawer-layer" role="dialog" aria-modal="true" aria-labelledby="ticket-drawer-title">
-      <button className="drawer-backdrop" onClick={closeTicket} aria-label="Fechar painel" />
+  return createPortal(
+    <div className="drawer-layer ticket-details-layer" role="dialog" aria-modal="true" aria-labelledby="ticket-details-title">
+      <button className="drawer-backdrop" onClick={closeTicket} aria-label="Fechar modal" />
       <aside className="ticket-drawer">
         <div className="drawer-header">
-          <div className="drawer-breadcrumb"><span>Tickets</span><span>/</span><strong>#{ticket.ticketNumber}</strong></div>
-          <div><button className="icon-button" aria-label="Mais opções"><MoreHorizontal size={19} /></button><button className="icon-button" onClick={closeTicket} aria-label="Fechar"><X size={19} /></button></div>
+          <div className="drawer-breadcrumb"><span>Tickets</span><span>/</span><strong id="ticket-details-title">#{ticket.ticketNumber}</strong></div>
+          <div><button className="icon-button" onClick={closeTicket} aria-label="Fechar"><X size={19} /></button></div>
         </div>
         <div className="drawer-content">
           <div className="drawer-title-row">
             <span className="ticket-code">#{ticket.ticketNumber}</span>
-            <StatusBadge status={ticket.status} />
+            <StatusBadge status={ticket.status} color={currentStatus?.color} />
           </div>
           <textarea className="drawer-description" value={description} onChange={(e) => setDescription(e.target.value)} onBlur={() => { if (description.trim() && description !== ticket.description) updateTicket(ticket.id, { description: description.trim() }, "Descrição"); }} rows={2} />
           <div className="drawer-meta">
-            <label><span>Status</span><select value={ticket.status} onChange={(e) => updateTicket(ticket.id, { status: e.target.value as TicketStatus }, "Status")}>{STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label>
+            <label><span>Status</span><select value={ticket.status} onChange={(e) => updateTicket(ticket.id, { status: e.target.value as TicketStatus }, "Status")}>{statuses.filter((status) => status.active || status.name === ticket.status).map((status) => <option key={status.id} value={status.name}>{status.name}</option>)}</select></label>
             <label><span>Sistema</span><select value={ticket.systemId} onChange={(e) => updateTicket(ticket.id, { systemId: e.target.value }, "Sistema")}>{systems.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             <label><span>Categoria</span><select value={ticket.categoryId} onChange={(e) => updateTicket(ticket.id, { categoryId: e.target.value }, "Categoria")}>{categories.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-            <label><span>Responsável</span><select value={ticket.responsibleId} onChange={(e) => updateTicket(ticket.id, { responsibleId: e.target.value }, "Responsável")}>{users.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <div className="drawer-responsibles"><span>Responsáveis</span><ResponsiblePicker compact users={users} value={ticket.responsibleIds} onChange={(responsibleIds) => updateTicket(ticket.id, { responsibleIds }, "Responsáveis")}/></div>
             <div><span>Recebido</span><p><CalendarDays size={15} />{formatDate(ticket.receivedAt)}</p></div>
-            <div><span>Finalizado</span><p><CalendarDays size={15} />{formatDate(ticket.finishedAt)}</p></div>
+            <label><span>Data final</span><input aria-label="Data de finalização" type="date" value={ticket.finishedAt ?? ""} onChange={(e) => updateTicket(ticket.id, { finishedAt: e.target.value || null }, "Data de finalização")} /></label>
           </div>
-          <section className="drawer-section">
-            <div className="section-heading"><div><h3>Etapas</h3><p>Acompanhamento interno deste ticket.</p></div><span>{Object.values(ticket.stages).filter(Boolean).length}/{stages.filter((stage) => stage.active).length}</span></div>
-            <div className="drawer-stages">
-              {stages.filter((stage) => stage.active).sort((a, b) => a.position - b.position).map((stage) => {
-                const checked = !!ticket.stages[stage.id];
-                return <button key={stage.id} className={checked ? "complete" : ""} onClick={() => updateTicket(ticket.id, { stages: { ...ticket.stages, [stage.id]: !checked } }, "Etapas")}><span>{checked ? <Check size={14} /> : stage.abbreviation}</span>{stage.name}</button>;
-              })}
-            </div>
-          </section>
           <section className="drawer-section activity-section">
             <div className="section-heading"><div><h3>Atividade</h3><p>Alterações recentes no ticket.</p></div><button className="text-button" onClick={() => setHistoryOpen(!historyOpen)}>{historyOpen ? "Ocultar" : "Ver histórico"}</button></div>
             <div className="last-update">
-              <Avatar name={responsible?.name ?? "Usuário"} size="sm" />
-              <p><strong>Atualizado por {ticket.history.at(-1)?.userName ?? responsible?.name}</strong><span>{relativeTime(ticket.updatedAt)}</span></p>
+              <Avatar name={lastUpdaterName} photoUrl={lastUpdater?.avatarUrl} size="sm" />
+              <p><strong>Atualizado por {lastUpdaterName}</strong><span>{relativeTime(ticket.updatedAt)}</span></p>
             </div>
             {historyOpen && <div className="history-list">{[...ticket.history].reverse().map((entry) => <div key={entry.id}><span className="history-dot" /><p><strong>{entry.field === "Ticket" ? entry.newValue : `${entry.field} alterado`}</strong>{entry.previousValue && <small>de “{entry.previousValue}” para “{entry.newValue}”</small>}<em>{entry.userName} · {formatDate(entry.createdAt, true)}</em></p></div>)}</div>}
           </section>
@@ -81,6 +75,7 @@ export function TicketDrawer() {
           </div>
         )}
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }

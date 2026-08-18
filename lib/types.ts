@@ -1,14 +1,5 @@
-export const STATUSES = [
-  "Não iniciado",
-  "Em atendimento",
-  "Em espera",
-  "Teste Centauro",
-  "Teste Oficial",
-  "Finalizado",
-] as const;
-
-export type TicketStatus = (typeof STATUSES)[number];
-export type Role = "Administrador" | "Usuário";
+export type TicketStatus = string;
+export type StatusColor = "neutral" | "blue" | "amber" | "violet" | "red" | "green";
 
 export interface SystemItem {
   id: string;
@@ -27,16 +18,17 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: Role;
   active: boolean;
+  avatarUrl: string | null;
 }
 
-export interface Stage {
+export interface StatusDefinition {
   id: string;
   name: string;
-  abbreviation: string;
+  color: StatusColor;
   position: number;
   active: boolean;
+  isFinal: boolean;
 }
 
 export interface HistoryEntry {
@@ -55,10 +47,9 @@ export interface Ticket {
   status: TicketStatus;
   categoryId: string;
   description: string;
-  responsibleId: string;
+  responsibleIds: string[];
   receivedAt: string;
   finishedAt: string | null;
-  stages: Record<string, boolean>;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -71,15 +62,38 @@ export interface TicketInput {
   status: TicketStatus;
   categoryId: string;
   description: string;
-  responsibleId: string;
+  responsibleIds: string[];
   receivedAt: string;
-  stages: Record<string, boolean>;
+  finishedAt: string | null;
+}
+
+export type TicketImportField = "ticketNumber" | "system" | "status" | "category" | "description" | "responsible" | "receivedAt" | "finishedAt";
+
+export interface TicketImportRow {
+  ticketNumber?: string;
+  system?: string;
+  status?: string;
+  category?: string;
+  description?: string;
+  responsible?: string;
+  receivedAt?: string;
+  finishedAt?: string;
+  sourceSheet?: string;
+  sourceRow?: number;
+}
+
+export interface TicketImportError {
+  row: number;
+  sheet?: string;
+  field: TicketImportField | "ticket";
+  kind?: "duplicate" | "validation";
+  message: string;
 }
 
 export interface AppData {
   tickets: Ticket[];
   systems: SystemItem[];
   categories: Category[];
+  statuses: StatusDefinition[];
   users: User[];
-  stages: Stage[];
 }

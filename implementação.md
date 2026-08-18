@@ -330,9 +330,9 @@ Select.
 
 Textarea.
 
-### Responsável
+### Responsáveis
 
-Select de usuários.
+Seleção múltipla de usuários, exigindo ao menos um responsável.
 
 ### Data de recebimento
 
@@ -340,7 +340,7 @@ Preencher automaticamente com a data atual, permitindo alteração.
 
 ### Data de finalização
 
-Não mostrar como campo obrigatório durante a criação.
+Mostrar como campo opcional e permitir informar manualmente a data real.
 
 ### Etapas
 
@@ -396,7 +396,7 @@ Não utilizar popups grandes.
 
 # 12. Abrir ticket
 
-Ao clicar na linha ou no número do ticket, abrir um painel lateral.
+Ao clicar na linha ou no número do ticket, abrir um modal central.
 
 Exemplo:
 
@@ -424,25 +424,27 @@ Gabriel
 
 Correção de caractere especial na geração CSV.
 
-Permitir editar as informações dentro do painel.
+Permitir editar as informações dentro do modal.
 
-O painel deve permitir visualizar tudo sem abandonar a lista de tickets.
+O modal deve permitir visualizar tudo sem abandonar a lista de tickets.
 
 ---
 
-# 13. Finalização automática
+# 13. Data de finalização manual
 
-Criar uma regra simples.
+A data de finalização deve ser informada manualmente pelo usuário.
 
-Quando o ticket for alterado para:
+Alterar o status para:
 
 **Finalizado**
 
-preencher automaticamente:
+não deve preencher nem apagar automaticamente a data de finalização.
 
-`data_finalizacao = data atual`
+O modal do ticket deve permitir:
 
-Caso o usuário retire o status de Finalizado posteriormente, permitir limpar ou atualizar a data.
+* informar a data real de finalização;
+* corrigir uma data existente;
+* limpar a data quando necessário.
 
 ---
 
@@ -611,7 +613,11 @@ Adicionar, editar e desativar categorias.
 
 ### Usuários
 
-Adicionar e remover responsáveis.
+Adicionar, editar e desativar usuários. A edição permite alterar nome, e-mail e, opcionalmente, redefinir a senha.
+
+### Status
+
+Adicionar, editar e desativar status, incluindo sua cor e identificação como status de conclusão.
 
 Não criar um painel administrativo gigantesco.
 
@@ -627,26 +633,17 @@ Campos:
 * email;
 * senha.
 
-Dois níveis são suficientes:
+Todos os usuários possuem o mesmo nível de acesso.
 
-### Administrador
+Podem:
 
-Pode:
-
-* gerenciar tickets;
+* visualizar, criar e editar tickets;
 * cadastrar usuários;
 * cadastrar sistemas;
-* cadastrar categorias.
+* cadastrar categorias;
+* configurar status.
 
-### Usuário
-
-Pode:
-
-* visualizar;
-* criar;
-* editar tickets.
-
-Não criar um sistema complexo de permissões.
+Não implementar cargos ou níveis diferentes de permissão.
 
 ---
 
@@ -701,13 +698,35 @@ Cada ticket pode marcar ou desmarcar essas etapas.
 
 Na tabela elas aparecem de forma compacta.
 
-Nas configurações o administrador pode definir quais etapas existem.
+Nas configurações é possível definir quais etapas existem.
 
 Não torne isso obrigatório para utilizar o sistema.
 
 ---
 
-# 24. Exportação
+# 24. Importação e exportação CSV
+
+Adicionar a opção:
+
+**Importar CSV ou Excel**
+
+Após selecionar o arquivo, mostrar todas as colunas encontradas e permitir mapear cada uma para um campo do Ticketabit.
+
+Arquivos `.xlsx` podem possuir várias abas. Listar todas as abas com dados, permitir configurar o mapeamento de cada aba separadamente e possibilitar desmarcar abas que não devem ser importadas. Validar conjuntamente todas as abas selecionadas e identificar o nome da aba e o número da linha em cada erro.
+
+Também permitir selecionar vários arquivos `.csv` ao mesmo tempo. Cada CSV representa uma aba exportada e deve aparecer no mesmo seletor de abas. Quando o nome seguir o padrão `Nome da planilha - Nome da aba.csv`, exibir somente o nome da aba no seletor.
+
+Exemplo:
+
+`objetivo` no CSV → `Descrição` no Ticketabit.
+
+O usuário pode ignorar colunas que não deseja importar. Antes de gravar, validar campos obrigatórios, datas, opções cadastradas e tickets duplicados. Na validação normal, caso exista qualquer erro, não importar parcialmente o arquivo e informar as linhas que precisam ser corrigidas.
+
+Quando a validação encontrar tickets repetidos no arquivo ou já existentes no banco, oferecer a ação **Importar mesmo assim**. Essa ação deve importar também os registros duplicados. Linhas com outros erros impeditivos, como sistema, categoria, status ou responsável não encontrado, continuam inválidas e devem ser ignoradas, com a quantidade apresentada ao usuário. A criação manual de tickets continua impedindo números duplicados.
+
+Sempre mostrar todas as colunas existentes no arquivo. Colunas sem mapeamento devem continuar visíveis, com aparência cinza e a opção `Ignorar coluna` selecionada.
+
+Aceitar `.xlsx` com múltiplas abas e CSV separado por ponto e vírgula, vírgula ou tabulação, com datas em `DD/MM/AAAA` ou `AAAA-MM-DD`.
 
 Adicionar uma opção discreta:
 
@@ -762,7 +781,6 @@ Entidades principais:
 * name
 * email
 * password/auth_id
-* role
 * created_at
 
 ## tickets
@@ -773,12 +791,18 @@ Entidades principais:
 * status
 * category_id
 * description
-* responsible_id
 * received_at
 * finished_at
 * created_by
 * created_at
 * updated_at
+
+## ticket_responsibles
+
+* ticket_id
+* user_id
+
+Um ticket pode possuir um ou vários responsáveis.
 
 ## systems
 

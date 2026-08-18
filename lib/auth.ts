@@ -14,8 +14,12 @@ interface UserRow extends RowDataPacket {
   id: string;
   name: string;
   email: string;
-  role: "Administrador" | "Usuário";
   active: number;
+  avatarUpdatedAt: string | null;
+}
+
+function avatarUrl(id: string, updatedAt: string | null) {
+  return updatedAt ? `/api/account/photo/${id}?v=${encodeURIComponent(updatedAt)}` : null;
 }
 
 function secret() {
@@ -54,7 +58,8 @@ export async function getCurrentUser(): Promise<User | null> {
   const cookieStore = await cookies();
   const session = readSessionToken(cookieStore.get(SESSION_COOKIE)?.value);
   if (!session) return null;
-  const rows = await query<UserRow[]>("select id, name, email, role, active from users where id = ? and active = 1 limit 1", [session.userId]);
+  const rows = await query<UserRow[]>("select id, name, email, active, avatar_updated_at as avatarUpdatedAt from users where id = ? and active = 1 limit 1", [session.userId]);
   if (!rows[0]) return null;
-  return { ...rows[0], active: Boolean(rows[0].active) };
+  const { avatarUpdatedAt, ...user } = rows[0];
+  return { ...user, active: Boolean(user.active), avatarUrl: avatarUrl(user.id, avatarUpdatedAt) };
 }

@@ -1,12 +1,11 @@
 "use client";
 
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
-import { AppData, Category, Stage, SystemItem, Ticket, TicketInput, User } from "@/lib/types";
-import { today } from "@/lib/utils";
+import { AppData, Category, StatusDefinition, SystemItem, Ticket, TicketInput, User } from "@/lib/types";
 
-type Entity = SystemItem | Category | User | Stage;
-type EntityType = "systems" | "categories" | "users" | "stages";
-const emptyData: AppData = { tickets: [], systems: [], categories: [], users: [], stages: [] };
+type Entity = SystemItem | Category | StatusDefinition | User;
+type EntityType = "systems" | "categories" | "statuses" | "users";
+const emptyData: AppData = { tickets: [], systems: [], categories: [], statuses: [], users: [] };
 
 interface AppContextValue extends AppData {
   hydrated: boolean;
@@ -27,7 +26,7 @@ interface AppContextValue extends AppData {
   updateTicket: (id: string, changes: Partial<Ticket>, label?: string) => Promise<void>;
   deleteTicket: (id: string) => Promise<void>;
   addEntity: (type: EntityType, entity: Entity, password?: string) => Promise<{ ok: boolean; error?: string }>;
-  updateEntity: (type: EntityType, id: string, changes: Partial<Entity>) => Promise<void>;
+  updateEntity: (type: EntityType, id: string, changes: Partial<Entity> & { password?: string }) => Promise<{ ok: boolean; error?: string }>;
   showNotice: (message: string) => void;
 }
 
@@ -97,10 +96,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...current,
       tickets: current.tickets.map((ticket) => {
         if (ticket.id !== id) return ticket;
-        const adjusted = { ...changes };
-        if (changes.status === "Finalizado" && ticket.status !== "Finalizado") adjusted.finishedAt = today();
-        if (changes.status && changes.status !== "Finalizado" && ticket.status === "Finalizado") adjusted.finishedAt = null;
-        return { ...ticket, ...adjusted, updatedAt: now };
+        return { ...ticket, ...changes, updatedAt: now };
       }),
     }));
     try {
@@ -140,15 +136,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateEntity = async (type: EntityType, id: string, changes: Partial<Entity>) => {
+  const updateEntity = async (type: EntityType, id: string, changes: Partial<Entity> & { password?: string }) => {
     try {
       const response = await fetch(`/api/entities/${type}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, changes }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
-      setData((current) => ({ ...current, [type]: (current[type] as Entity[]).map((entity) => entity.id === id ? { ...entity, ...changes } : entity) } as AppData));
+      await reloadData();
       showNotice("Alterações salvas");
+      return { ok: true };
     } catch (error) {
-      showNotice(error instanceof Error ? error.message : "Erro ao salvar");
+      const message = error instanceof Error ? error.message : "Erro ao salvar";
+      showNotice(message);
+      return { ok: false, error: message };
     }
   };
 

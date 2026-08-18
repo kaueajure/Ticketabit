@@ -19,13 +19,7 @@ npm install
 npm run db:migrate
 ```
 
-4. Preencha `ADMIN_NAME`, `ADMIN_EMAIL` e `ADMIN_PASSWORD` no `.env` e crie o primeiro acesso:
-
-```bash
-npm run db:create-admin
-```
-
-5. Inicie a aplicação:
+4. Inicie a aplicação:
 
 ```bash
 npm run dev
@@ -56,7 +50,7 @@ Build: npm run build
 Start: npm run start
 ```
 
-Execute `npm run db:migrate` e `npm run db:create-admin` uma vez em um ambiente com acesso ao banco.
+Execute `npm run db:migrate` em um ambiente com acesso ao banco. Nenhum usuário ou credencial é criado automaticamente pelo código.
 
 ## Estrutura de dados
 
@@ -65,9 +59,9 @@ O arquivo `database/schema.sql` contém as tabelas:
 - `users`;
 - `systems`;
 - `categories`;
-- `stages`;
+- `statuses`;
 - `tickets`;
-- `ticket_stages`;
 - `ticket_history`.
 
 As senhas são armazenadas apenas como hash bcrypt. A autenticação gera uma sessão assinada em cookie `httpOnly`, `SameSite=Lax` e `Secure` em produção.
+Todos os usuários possuem as mesmas permissões no sistema.

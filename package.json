@@ -9,8 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
-    "db:create-admin": "node --env-file-if-exists=.env scripts/create-admin.mjs"
+    "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
@@ -18,7 +17,8 @@
     "mysql2": "^3.15.3",
     "next": "^16.3.1",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "read-excel-file": "^9.3.10"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

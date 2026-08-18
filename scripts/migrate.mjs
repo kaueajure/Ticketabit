@@ -1,6 +1,18 @@
 import fs from "node:fs/promises";
 import mysql from "mysql2/promise";
 
+const requiredDatabaseVariables = ["DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME"];
+const missingDatabaseVariables = process.env.DATABASE_URL
+  ? []
+  : requiredDatabaseVariables.filter((key) => !process.env[key]);
+
+if (missingDatabaseVariables.length) {
+  throw new Error(
+    `Configuração do MySQL ausente: ${missingDatabaseVariables.join(", ")}. ` +
+    "Crie o arquivo .env a partir do .env.example e preencha as credenciais reais.",
+  );
+}
+
 const config = process.env.DATABASE_URL
   ? { uri: process.env.DATABASE_URL }
   : {
