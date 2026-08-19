@@ -9,6 +9,7 @@ create table if not exists users (
   avatar_data mediumblob null,
   avatar_mime varchar(50) null,
   avatar_updated_at timestamp null,
+  theme varchar(10) not null default 'light',
   created_at timestamp not null default current_timestamp,
   updated_at timestamp not null default current_timestamp on update current_timestamp
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
@@ -16,6 +17,7 @@ create table if not exists users (
 alter table users add column if not exists avatar_data mediumblob null;
 alter table users add column if not exists avatar_mime varchar(50) null;
 alter table users add column if not exists avatar_updated_at timestamp null;
+alter table users add column if not exists theme varchar(10) not null default 'light';
 alter table users drop column if exists role;
 
 create table if not exists note_folders (

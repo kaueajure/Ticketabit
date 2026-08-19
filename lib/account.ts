@@ -3,6 +3,7 @@ import "server-only";
 import bcrypt from "bcryptjs";
 import { RowDataPacket } from "mysql2/promise";
 import { execute, query } from "@/lib/db";
+import { ThemePreference } from "@/lib/types";
 
 interface PasswordRow extends RowDataPacket {
   passwordHash: string;
@@ -19,6 +20,11 @@ export async function updateOwnAccount(userId: string, name: string) {
     throw new Error("O nome deve possuir entre 2 e 120 caracteres.");
   }
   await execute("update users set name = ? where id = ? and active = true", [normalizedName, userId]);
+}
+
+export async function updateOwnTheme(userId: string, theme: ThemePreference) {
+  if (theme !== "light" && theme !== "dark") throw new Error("Tema inválido.");
+  await execute("update users set theme = ? where id = ? and active = true", [theme, userId]);
 }
 
 export async function changeOwnPassword(userId: string, currentPassword: string, newPassword: string) {

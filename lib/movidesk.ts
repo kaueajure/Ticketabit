@@ -1,0 +1,163 @@
+import "server-only";
+
+import { OfficialHistoryEvent, OfficialHistoryEventKind, OfficialTicketHistory } from "@/lib/types";
+
+interface MovideskPerson {
+  businessName?: unknown;
+}
+
+interface MovideskStatusHistory {
+  status?: unknown;
+  justification?: unknown;
+  changedBy?: MovideskPerson | null;
+  changedDate?: unknown;
+}
+
+interface MovideskOwnerHistory {
+  ownerTeam?: unknown;
+  owner?: MovideskPerson | null;
+  changedBy?: MovideskPerson | null;
+  changedDate?: unknown;
+}
+
+interface MovideskTicketHistoryResponse {
+  id?: unknown;
+  createdDate?: unknown;
+  lastActionDate?: unknown;
+  actionCount?: unknown;
+  reopenedIn?: unknown;
+  resolvedIn?: unknown;
+  closedIn?: unknown;
+  ownerHistories?: unknown;
+  statusHistories?: unknown;
+}
+
+export class MovideskHistoryError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+    this.name = "MovideskHistoryError";
+  }
+}
+
+function text(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function date(value: unknown) {
+  const candidate = text(value);
+  return candidate && Number.isFinite(new Date(candidate).getTime()) ? candidate : "";
+}
+
+function personName(person?: MovideskPerson | null) {
+  return text(person?.businessName);
+}
+
+export function mapMovideskTicketHistory(ticketNumber: string, ticket: MovideskTicketHistoryResponse): OfficialTicketHistory {
+  const events: OfficialHistoryEvent[] = [];
+  let sequence = 0;
+  const addEvent = (kind: OfficialHistoryEventKind, title: string, createdAt: string, detail?: string, actor?: string) => {
+    if (!createdAt) return;
+    events.push({
+      id: `${kind}-${sequence++}-${createdAt}`,
+      kind,
+      title,
+      ...(detail ? { detail } : {}),
+      ...(actor ? { actor } : {}),
+      createdAt,
+    });
+  };
+
+  addEvent("received", "Ticket recebido", date(ticket.createdDate), undefined, "Movidesk");
+
+  const statusHistories = Array.isArray(ticket.statusHistories) ? ticket.statusHistories as MovideskStatusHistory[] : [];
+  for (const history of statusHistories) {
+    const status = text(history.status);
+    if (!status) continue;
+    const justification = text(history.justification);
+    addEvent(
+      "status",
+      `Status alterado para ${status}`,
+      date(history.changedDate),
+      justification ? `Justificativa: ${justification}` : undefined,
+      personName(history.changedBy) || "Movidesk",
+    );
+  }
+
+  const ownerHistories = Array.isArray(ticket.ownerHistories) ? ticket.ownerHistories as MovideskOwnerHistory[] : [];
+  for (const history of ownerHistories) {
+    const owner = personName(history.owner);
+    const team = text(history.ownerTeam);
+    addEvent(
+      "owner",
+      owner ? `Responsável alterado para ${owner}` : team ? `Equipe responsável alterada para ${team}` : "Responsável alterado",
+      date(history.changedDate),
+      owner && team ? `Equipe: ${team}` : undefined,
+      personName(history.changedBy) || "Movidesk",
+    );
+  }
+
+  const actionCount = Math.max(0, Number(ticket.actionCount) || 0);
+  addEvent(
+    "action",
+    "Última ação registrada",
+    date(ticket.lastActionDate),
+    actionCount ? `${actionCount} ${actionCount === 1 ? "ação registrada" : "ações registradas"} no ticket` : undefined,
+    "Movidesk",
+  );
+  addEvent("reopened", "Ticket reaberto", date(ticket.reopenedIn), undefined, "Movidesk");
+  addEvent("resolved", "Ticket resolvido", date(ticket.resolvedIn), undefined, "Movidesk");
+  addEvent("closed", "Ticket fechado", date(ticket.closedIn), undefined, "Movidesk");
+
+  events.sort((first, second) => new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime());
+
+  return {
+    source: "movidesk",
+    ticketNumber,
+    actionCount,
+    events,
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+export async function getMovideskTicketHistory(ticketNumber: string): Promise<OfficialTicketHistory> {
+  const token = process.env.MOVIDESK_API_TOKEN?.trim();
+  if (!token) throw new MovideskHistoryError("A integração com o Movidesk ainda não foi configurada.", 503);
+
+  const baseUrl = (process.env.MOVIDESK_API_URL?.trim() || "https://api.movidesk.com/public/v1").replace(/\/+$/, "");
+  const url = new URL(`${baseUrl}/tickets`);
+  url.searchParams.set("token", token);
+  url.searchParams.set("id", ticketNumber);
+  url.searchParams.set("$select", "id,createdDate,lastActionDate,actionCount,reopenedIn,resolvedIn,closedIn");
+  url.searchParams.set("$expand", "ownerHistories,statusHistories");
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(12_000),
+    });
+  } catch (error) {
+    const timedOut = error instanceof DOMException && error.name === "TimeoutError";
+    throw new MovideskHistoryError(timedOut ? "O Movidesk demorou demais para responder." : "Não foi possível conectar à API do Movidesk.", 502);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new MovideskHistoryError("O token da API do Movidesk não foi aceito.", 502);
+  }
+  if (response.status === 404) throw new MovideskHistoryError(`Ticket #${ticketNumber} não encontrado no Movidesk.`, 404);
+  if (!response.ok) throw new MovideskHistoryError("O Movidesk não conseguiu retornar o histórico deste ticket.", 502);
+
+  const body = await response.text();
+  let result: MovideskTicketHistoryResponse | null;
+  try {
+    result = JSON.parse(body) as MovideskTicketHistoryResponse | null;
+  } catch {
+    throw new MovideskHistoryError("O Movidesk retornou uma resposta inválida.", 502);
+  }
+  if (!result || typeof result !== "object" || Array.isArray(result) || !result.id) {
+    throw new MovideskHistoryError(`Ticket #${ticketNumber} não encontrado no Movidesk.`, 404);
+  }
+
+  return mapMovideskTicketHistory(ticketNumber, result);
+}

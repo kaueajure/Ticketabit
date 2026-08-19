@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
-import { Camera, KeyRound, Mail, Trash2, UserRound } from "lucide-react";
+import { Camera, Check, KeyRound, Mail, Moon, Palette, Sun, Trash2, UserRound } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { useApp } from "@/components/providers/app-provider";
 import { Avatar } from "@/components/ui/avatar";
@@ -12,7 +12,7 @@ async function responseError(response: Response, fallback: string) {
 }
 
 export function AccountView() {
-  const { currentUser, reloadData, showNotice } = useApp();
+  const { currentUser, reloadData, showNotice, theme, changeTheme } = useApp();
   const fileInput = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(currentUser?.name ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -24,6 +24,7 @@ export function AccountView() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [savingPhoto, setSavingPhoto] = useState(false);
+  const [savingTheme, setSavingTheme] = useState(false);
 
   useEffect(() => setName(currentUser?.name ?? ""), [currentUser?.name]);
 
@@ -102,9 +103,16 @@ export function AccountView() {
     showNotice("Foto removida");
   };
 
+  const selectTheme = async (nextTheme: "light" | "dark") => {
+    if (nextTheme === theme || savingTheme) return;
+    setSavingTheme(true);
+    await changeTheme(nextTheme);
+    setSavingTheme(false);
+  };
+
   return (
     <div className="page account-page">
-      <PageHeader eyebrow="CONTA" title="Configurações da conta" description="Gerencie suas informações pessoais e sua segurança." />
+      <PageHeader eyebrow="CONTA" title="Configurações da conta" description="Gerencie suas informações pessoais, aparência e segurança." />
       <div className="account-layout">
         <aside className="account-profile-card">
           <div className="account-photo">
@@ -132,6 +140,23 @@ export function AccountView() {
             {profileError && <p className="form-error account-form-error">{profileError}</p>}
             <footer><button className="primary-button" disabled={savingProfile || name.trim() === currentUser.name}>{savingProfile ? "Salvando..." : "Salvar alterações"}</button></footer>
           </form>
+
+          <section className="account-section account-theme-section">
+            <div className="account-section-heading"><span><Palette size={17} /></span><div><h2>Aparência</h2><p>Escolha como o Ticketabit será exibido para sua conta.</p></div></div>
+            <div className="theme-choice-grid">
+              <button type="button" className={`theme-choice ${theme === "light" ? "active" : ""}`} onClick={() => void selectTheme("light")} disabled={savingTheme} aria-pressed={theme === "light"}>
+                <span className="theme-choice-preview light"><i/><i/><i/></span>
+                <span className="theme-choice-copy"><Sun size={16}/><span><strong>Claro</strong><small>Interface clara e suave</small></span></span>
+                {theme === "light" && <Check size={15} className="theme-choice-check"/>}
+              </button>
+              <button type="button" className={`theme-choice ${theme === "dark" ? "active" : ""}`} onClick={() => void selectTheme("dark")} disabled={savingTheme} aria-pressed={theme === "dark"}>
+                <span className="theme-choice-preview dark"><i/><i/><i/></span>
+                <span className="theme-choice-copy"><Moon size={16}/><span><strong>Escuro</strong><small>Menos brilho em ambientes escuros</small></span></span>
+                {theme === "dark" && <Check size={15} className="theme-choice-check"/>}
+              </button>
+            </div>
+            <footer><span className="theme-save-copy">{savingTheme ? "Salvando preferência..." : "O tema é aplicado imediatamente em todas as páginas."}</span></footer>
+          </section>
 
           <form className="account-section" onSubmit={changePassword}>
             <div className="account-section-heading"><span><KeyRound size={17} /></span><div><h2>Alterar senha</h2><p>Confirme sua senha atual antes de definir uma nova.</p></div></div>

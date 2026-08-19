@@ -4,7 +4,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { RowDataPacket } from "mysql2";
 import { query } from "@/lib/db";
-import { User } from "@/lib/types";
+import { ThemePreference, User } from "@/lib/types";
 
 export const SESSION_COOKIE = "ticketabit_session";
 export const SESSION_DURATION = 60 * 60 * 24 * 7;
@@ -16,6 +16,7 @@ interface UserRow extends RowDataPacket {
   email: string;
   active: number;
   avatarUpdatedAt: string | null;
+  theme: ThemePreference | string;
 }
 
 function avatarUrl(id: string, updatedAt: string | null) {
@@ -58,8 +59,8 @@ export async function getCurrentUser(): Promise<User | null> {
   const cookieStore = await cookies();
   const session = readSessionToken(cookieStore.get(SESSION_COOKIE)?.value);
   if (!session) return null;
-  const rows = await query<UserRow[]>("select id, name, email, active, avatar_updated_at as avatarUpdatedAt from users where id = ? and active = 1 limit 1", [session.userId]);
+  const rows = await query<UserRow[]>("select id, name, email, active, avatar_updated_at as avatarUpdatedAt, theme from users where id = ? and active = 1 limit 1", [session.userId]);
   if (!rows[0]) return null;
   const { avatarUpdatedAt, ...user } = rows[0];
-  return { ...user, active: Boolean(user.active), avatarUrl: avatarUrl(user.id, avatarUpdatedAt) };
+  return { ...user, theme: user.theme === "dark" ? "dark" : "light", active: Boolean(user.active), avatarUrl: avatarUrl(user.id, avatarUpdatedAt) };
 }

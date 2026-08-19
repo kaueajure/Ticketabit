@@ -137,6 +137,11 @@ export async function getExtensionTicket(ticketNumberInput: string) {
   return ticket ? { id: String(ticket.id), ticketNumber: String(ticket.ticketNumber), status: String(ticket.status) } : null;
 }
 
+export async function getTicketNumberById(id: string) {
+  const rows = await query<RowDataPacket[]>("select ticket_number as ticketNumber from tickets where id = ? limit 1", [id]);
+  return rows[0] ? String(rows[0].ticketNumber) : null;
+}
+
 function todayInSaoPaulo() {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Sao_Paulo",

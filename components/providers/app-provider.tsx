@@ -1,12 +1,18 @@
 "use client";
 
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
-import { AppData, Category, StatusDefinition, SystemItem, Ticket, TicketInput, User } from "@/lib/types";
+import { AppData, Category, StatusDefinition, SystemItem, ThemePreference, Ticket, TicketInput, User } from "@/lib/types";
 import { readApiJson } from "@/lib/client-http";
 
 type Entity = SystemItem | Category | StatusDefinition | User;
 type EntityType = "systems" | "categories" | "statuses" | "users";
 const emptyData: AppData = { tickets: [], systems: [], categories: [], statuses: [], users: [] };
+
+function applyTheme(theme: ThemePreference) {
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme = theme;
+  window.localStorage.setItem("ticketabit:theme", theme);
+}
 
 interface AppContextValue extends AppData {
   hydrated: boolean;
@@ -17,6 +23,7 @@ interface AppContextValue extends AppData {
   selectedTicketId: string | null;
   globalSearch: string;
   notice: string | null;
+  theme: ThemePreference;
   reloadData: () => Promise<void>;
   openNewTicket: () => void;
   closeNewTicket: () => void;
@@ -29,6 +36,7 @@ interface AppContextValue extends AppData {
   addEntity: (type: EntityType, entity: Entity, password?: string) => Promise<{ ok: boolean; error?: string }>;
   updateEntity: (type: EntityType, id: string, changes: Partial<Entity> & { password?: string }) => Promise<{ ok: boolean; error?: string }>;
   showNotice: (message: string) => void;
+  changeTheme: (theme: ThemePreference) => Promise<boolean>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -43,6 +51,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [globalSearch, setGlobalSearch] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [theme, setTheme] = useState<ThemePreference>("light");
 
   const reloadData = async () => {
     if (window.location.pathname === "/login") {
@@ -64,8 +73,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const result = await readApiJson<AppData & { currentUser: User; error?: string }>(response);
       if (!response.ok) throw new Error(result.error ?? "Não foi possível carregar os dados.");
       const { currentUser: authenticatedUser, ...appData } = result;
+      const accountTheme: ThemePreference = authenticatedUser.theme === "dark" ? "dark" : "light";
       setData(appData as AppData);
-      setCurrentUser(authenticatedUser as User);
+      setCurrentUser({ ...authenticatedUser, theme: accountTheme } as User);
+      setTheme(accountTheme);
+      applyTheme(accountTheme);
     } catch (error) {
       setLoadError(error instanceof DOMException && error.name === "TimeoutError"
         ? "O servidor demorou demais para responder. Tente novamente."
@@ -76,11 +88,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  useEffect(() => { void reloadData(); }, []);
+  useEffect(() => {
+    const cachedTheme = window.localStorage.getItem("ticketabit:theme") === "dark" ? "dark" : "light";
+    setTheme(cachedTheme);
+    applyTheme(cachedTheme);
+    void reloadData();
+  }, []);
 
   const showNotice = (message: string) => {
     setNotice(message);
     window.setTimeout(() => setNotice(null), 2400);
+  };
+
+  const changeTheme = async (nextTheme: ThemePreference) => {
+    const previousTheme = theme;
+    setTheme(nextTheme);
+    applyTheme(nextTheme);
+    try {
+      const response = await fetch("/api/account", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme: nextTheme }),
+      });
+      const result = await readApiJson<{ error?: string }>(response);
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível salvar o tema.");
+      setCurrentUser((current) => current ? { ...current, theme: nextTheme } : current);
+      showNotice(nextTheme === "dark" ? "Tema escuro ativado" : "Tema claro ativado");
+      return true;
+    } catch (error) {
+      setTheme(previousTheme);
+      applyTheme(previousTheme);
+      showNotice(error instanceof Error ? error.message : "Não foi possível salvar o tema.");
+      return false;
+    }
   };
 
   const createTicket = async (input: TicketInput) => {
@@ -159,12 +199,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo(() => ({
-    ...data, hydrated, loading, loadError, currentUser, ticketModalOpen, selectedTicketId, globalSearch, notice,
+    ...data, hydrated, loading, loadError, currentUser, ticketModalOpen, selectedTicketId, globalSearch, notice, theme,
     reloadData,
     openNewTicket: () => setTicketModalOpen(true), closeNewTicket: () => setTicketModalOpen(false),
     openTicket: setSelectedTicketId, closeTicket: () => setSelectedTicketId(null), setGlobalSearch,
-    createTicket, updateTicket, deleteTicket, addEntity, updateEntity, showNotice,
-  }), [data, hydrated, loading, loadError, currentUser, ticketModalOpen, selectedTicketId, globalSearch, notice]);
+    createTicket, updateTicket, deleteTicket, addEntity, updateEntity, showNotice, changeTheme,
+  }), [data, hydrated, loading, loadError, currentUser, ticketModalOpen, selectedTicketId, globalSearch, notice, theme]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

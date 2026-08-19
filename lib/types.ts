@@ -1,5 +1,6 @@
 export type TicketStatus = string;
 export type StatusColor = "neutral" | "blue" | "amber" | "violet" | "red" | "green";
+export type ThemePreference = "light" | "dark";
 
 export interface SystemItem {
   id: string;
@@ -20,6 +21,7 @@ export interface User {
   email: string;
   active: boolean;
   avatarUrl: string | null;
+  theme?: ThemePreference;
 }
 
 export interface StatusDefinition {
@@ -38,6 +40,25 @@ export interface HistoryEntry {
   newValue: string;
   userName: string;
   createdAt: string;
+}
+
+export type OfficialHistoryEventKind = "received" | "status" | "owner" | "action" | "reopened" | "resolved" | "closed";
+
+export interface OfficialHistoryEvent {
+  id: string;
+  kind: OfficialHistoryEventKind;
+  title: string;
+  detail?: string;
+  actor?: string;
+  createdAt: string;
+}
+
+export interface OfficialTicketHistory {
+  source: "movidesk";
+  ticketNumber: string;
+  actionCount: number;
+  events: OfficialHistoryEvent[];
+  fetchedAt: string;
 }
 
 export interface Ticket {
