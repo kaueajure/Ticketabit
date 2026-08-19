@@ -148,7 +148,7 @@ async function requestMovideskTicket(ticketNumber: string, select: string, expan
     throw new MovideskHistoryError("O token da API do Movidesk não foi aceito.", 502);
   }
   if (response.status === 404) throw new MovideskHistoryError(`Ticket #${ticketNumber} não encontrado no Movidesk.`, 404);
-  if (!response.ok) throw new MovideskHistoryError("O Movidesk não conseguiu retornar o histórico deste ticket.", 502);
+  if (!response.ok) throw new MovideskHistoryError("O Movidesk não conseguiu retornar os dados deste ticket.", 502);
 
   const body = await response.text();
   let result: MovideskTicketHistoryResponse | null;
