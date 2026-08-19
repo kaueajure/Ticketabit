@@ -1,11 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { createTicketFromExtension, DuplicateTicketError, ExtensionTicketValidationError, getExtensionOptions } from "@/lib/repository";
-import { ExtensionTicketInput } from "@/lib/types";
+import { createTicketFromExtension, DuplicateTicketError, ExtensionTicketValidationError, getExtensionOptions, getExtensionTicket, updateTicketStatusFromExtension } from "@/lib/repository";
+import { ExtensionTicketInput, ExtensionTicketStatusInput } from "@/lib/types";
 
 const responseHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
   "Access-Control-Allow-Headers": "Authorization, Content-Type",
   "Access-Control-Max-Age": "86400",
   "Cache-Control": "no-store",
@@ -33,10 +33,36 @@ export async function GET(request: Request) {
   if (!process.env.EXTENSION_API_KEY?.trim()) return json({ error: "A integração da extensão não está configurada no servidor." }, 503);
   if (!authorized(request)) return json({ error: "Chave da extensão inválida." }, 401);
   try {
+    const ticketNumber = new URL(request.url).searchParams.get("ticketNumber");
+    if (ticketNumber !== null) {
+      const ticket = await getExtensionTicket(ticketNumber);
+      return json({ exists: Boolean(ticket), ticket }, 200);
+    }
     return json(await getExtensionOptions(), 200);
   } catch (error) {
+    if (error instanceof ExtensionTicketValidationError) return json({ error: error.message }, 400);
     console.error("Get extension options error", error);
     return json({ error: "Não foi possível carregar as opções do Ticketabit." }, 500);
+  }
+}
+
+export async function PUT(request: Request) {
+  if (!process.env.EXTENSION_API_KEY?.trim()) return json({ error: "A integração da extensão não está configurada no servidor." }, 503);
+  if (!authorized(request)) return json({ error: "Chave da extensão inválida." }, 401);
+
+  try {
+    const body = await request.json() as unknown;
+    if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "Corpo da requisição inválido." }, 400);
+    const ticket = await updateTicketStatusFromExtension(body as ExtensionTicketStatusInput);
+    const message = ticket.updated
+      ? `Status do ticket #${ticket.ticketNumber} substituído de “${ticket.previousStatus}” para “${ticket.status}”.`
+      : `O ticket #${ticket.ticketNumber} já está com o status “${ticket.status}”.`;
+    return json({ message, ticket }, 200);
+  } catch (error) {
+    if (error instanceof SyntaxError) return json({ error: "Corpo da requisição inválido." }, 400);
+    if (error instanceof ExtensionTicketValidationError) return json({ error: error.message }, 400);
+    console.error("Update extension ticket error", error);
+    return json({ error: "Não foi possível substituir o status do ticket pela extensão." }, 500);
   }
 }
 

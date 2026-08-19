@@ -1,0 +1,3 @@
+1. O campo do nome do ticket pode ser alterado, e escrito do jeito que a pessoa preferir inserir.
+2. Quero que a extensão valide antes de inserir, se ja existe um ticket com aquele mesmo numero, caso exista, mudar o botao de inserir para sobrescrever, que o ticket continua o mesmo, mas atualiza o status, exemplo, no sistema está Em Atendimento, mas no movidesk está Teste Centauro, eu apenas substituo pela extensão, utilizando o botão de substituir.
+3. O botão de recarregar, não está recarregando de verdade. Ajustar. 

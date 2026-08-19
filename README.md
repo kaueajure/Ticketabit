@@ -71,7 +71,7 @@ Todos os usuários possuem as mesmas permissões no sistema.
 
 ## Integração direta com a Ticketensão
 
-A rota `POST /api/extension/tickets` permite que a extensão interna crie um ticket sem abrir o site. Configure no ambiente de produção:
+As rotas internas em `/api/extension/tickets` permitem carregar opções oficiais, consultar duplicidade, criar tickets e substituir o status de um ticket existente sem abrir o site. Configure no ambiente de produção:
 
 ```text
 EXTENSION_API_KEY=1544752770fcf0c0951fe2e021b8a60813789f0c199d67695b6a7f9395765250
@@ -79,4 +79,4 @@ EXTENSION_DEFAULT_CATEGORY=Suporte
 EXTENSION_DEFAULT_STATUS=Não iniciado
 ```
 
-A chave já corresponde à versão interna da extensão. O usuário configura somente o próprio e-mail; sistemas, categorias e status ativos são carregados pela API e exibidos como opções reais. Tickets duplicados são recusados e o histórico registra a origem da criação.
+A chave já corresponde à versão interna da extensão. O usuário configura somente o próprio e-mail; sistemas, categorias e status ativos são carregados pela API e exibidos como opções reais. Antes da criação, o número é consultado. Quando ele já existe, a extensão mantém o mesmo registro e pode substituir somente o status, registrando a alteração no histórico.

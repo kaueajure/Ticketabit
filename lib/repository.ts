@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { RowDataPacket } from "mysql2/promise";
 import { execute, query, withTransaction } from "@/lib/db";
-import { AppData, Category, ExtensionTicketInput, ExtensionTicketResult, HistoryEntry, StatusDefinition, SystemItem, Ticket, TicketImportError, TicketImportRow, TicketInput, User } from "@/lib/types";
+import { AppData, Category, ExtensionTicketInput, ExtensionTicketResult, ExtensionTicketStatusInput, ExtensionTicketStatusResult, HistoryEntry, StatusDefinition, SystemItem, Ticket, TicketImportError, TicketImportRow, TicketInput, User } from "@/lib/types";
 
 interface SystemRow extends RowDataPacket, Omit<SystemItem, "active"> { active: boolean | number; }
 interface CategoryRow extends RowDataPacket, Omit<Category, "active"> { active: boolean | number; }
@@ -126,6 +126,17 @@ export async function getExtensionOptions() {
   };
 }
 
+export async function getExtensionTicket(ticketNumberInput: string) {
+  const ticketNumber = ticketNumberInput.trim().replace(/^#/, "");
+  if (!ticketNumber || ticketNumber.length > 80) throw new ExtensionTicketValidationError("Informe um número de ticket válido com até 80 caracteres.");
+  const rows = await query<RowDataPacket[]>(
+    "select id, ticket_number as ticketNumber, status from tickets where ticket_number = ? limit 1",
+    [ticketNumber],
+  );
+  const ticket = rows[0];
+  return ticket ? { id: String(ticket.id), ticketNumber: String(ticket.ticketNumber), status: String(ticket.status) } : null;
+}
+
 function todayInSaoPaulo() {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Sao_Paulo",
@@ -206,6 +217,49 @@ export async function createTicketFromExtension(input: ExtensionTicketInput): Pr
     status: String(status.name),
     responsible: user.name,
   };
+}
+
+export async function updateTicketStatusFromExtension(input: ExtensionTicketStatusInput): Promise<ExtensionTicketStatusResult> {
+  const ticketNumber = String(input.ticketNumber ?? "").trim().replace(/^#/, "");
+  const statusName = String(input.status ?? "").trim();
+  const responsibleEmail = String(input.responsibleEmail ?? "").trim();
+
+  if (!ticketNumber || ticketNumber.length > 80) throw new ExtensionTicketValidationError("Informe um número de ticket válido com até 80 caracteres.");
+  if (!statusName) throw new ExtensionTicketValidationError("Selecione um status válido.");
+  if (!responsibleEmail || responsibleEmail.length > 190) throw new ExtensionTicketValidationError("Configure o e-mail do responsável na extensão.");
+
+  const [statusRows, userRows] = await Promise.all([
+    query<RowDataPacket[]>("select name from statuses where active = true order by position, name"),
+    query<RowDataPacket[]>("select id, name, email from users where active = true and lower(email) = lower(?) limit 2", [responsibleEmail]),
+  ]);
+  const status = findUniqueNamedRow(statusRows, statusName, "Status");
+  const userRow = userRows[0];
+  if (!userRow) throw new ExtensionTicketValidationError(`Responsável “${responsibleEmail}” não encontrado entre os usuários ativos.`);
+  const nextStatus = String(status.name);
+  return withTransaction(async (connection) => {
+    const [ticketRows] = await connection.execute<RowDataPacket[]>(
+      "select id, ticket_number as ticketNumber, status from tickets where ticket_number = ? limit 1 for update",
+      [ticketNumber],
+    );
+    const ticketRow = ticketRows[0];
+    if (!ticketRow) throw new ExtensionTicketValidationError(`Ticket #${ticketNumber} não encontrado para substituição.`);
+    const previousStatus = String(ticketRow.status);
+    const updated = previousStatus !== nextStatus;
+    if (updated) {
+      await connection.execute("update tickets set status = ?, updated_by = ? where id = ?", [nextStatus, userRow.id, ticketRow.id]);
+      await connection.execute(
+        "insert into ticket_history (id, ticket_id, user_id, field, previous_value, new_value) values (?, ?, ?, 'Status (extensão Movidesk)', ?, ?)",
+        [randomUUID(), ticketRow.id, userRow.id, previousStatus, nextStatus],
+      );
+    }
+    return {
+      id: String(ticketRow.id),
+      ticketNumber: String(ticketRow.ticketNumber),
+      previousStatus,
+      status: nextStatus,
+      updated,
+    };
+  });
 }
 
 function parseImportDate(value: string) {

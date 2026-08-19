@@ -85,6 +85,20 @@ export interface ExtensionTicketResult {
   responsible: string;
 }
 
+export interface ExtensionTicketStatusInput {
+  ticketNumber: string;
+  status: string;
+  responsibleEmail: string;
+}
+
+export interface ExtensionTicketStatusResult {
+  id: string;
+  ticketNumber: string;
+  previousStatus: string;
+  status: string;
+  updated: boolean;
+}
+
 export type TicketImportField = "ticketNumber" | "system" | "status" | "category" | "description" | "responsible" | "receivedAt" | "finishedAt";
 
 export interface TicketImportRow {
