@@ -74,7 +74,9 @@ Todos os usuários possuem as mesmas permissões no sistema.
 A rota `POST /api/extension/tickets` permite que a extensão interna crie um ticket sem abrir o site. Configure no ambiente de produção:
 
 ```text
-EXTENSION_API_KEY=uma_chave_aleatoria_com_32_ou_mais_caracteres
+EXTENSION_API_KEY=1544752770fcf0c0951fe2e021b8a60813789f0c199d67695b6a7f9395765250
+EXTENSION_DEFAULT_CATEGORY=Suporte
+EXTENSION_DEFAULT_STATUS=Não iniciado
 ```
 
-Gere a chave com `openssl rand -hex 32` e informe o mesmo valor nas configurações da extensão. A requisição também informa o e-mail do responsável, a categoria e o status padrão; todos são validados contra cadastros ativos. O sistema é localizado pelo nome capturado no Movidesk, tickets duplicados são recusados e o histórico registra a origem da criação.
+A chave já corresponde à versão interna da extensão. O usuário configura somente o próprio e-mail; sistemas, categorias e status ativos são carregados pela API e exibidos como opções reais. Tickets duplicados são recusados e o histórico registra a origem da criação.

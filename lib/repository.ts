@@ -102,6 +102,30 @@ export class ExtensionTicketValidationError extends Error {
   }
 }
 
+export async function getExtensionOptions() {
+  const [systemRows, categoryRows, statusRows] = await Promise.all([
+    query<RowDataPacket[]>("select id, name from systems where active = true order by name"),
+    query<RowDataPacket[]>("select id, name from categories where active = true order by name"),
+    query<RowDataPacket[]>("select id, name, is_final as isFinal from statuses where active = true order by position, name"),
+  ]);
+  const configuredCategory = process.env.EXTENSION_DEFAULT_CATEGORY?.trim() || "Suporte";
+  const configuredStatus = process.env.EXTENSION_DEFAULT_STATUS?.trim() || "Não iniciado";
+  const defaultCategory = categoryRows.find((row) => normalizedLookupValue(String(row.name)) === normalizedLookupValue(configuredCategory)) ?? categoryRows[0];
+  const defaultStatus = statusRows.find((row) => normalizedLookupValue(String(row.name)) === normalizedLookupValue(configuredStatus))
+    ?? statusRows.find((row) => !Boolean(row.isFinal))
+    ?? statusRows[0];
+
+  return {
+    systems: systemRows.map((row) => ({ id: String(row.id), name: String(row.name) })),
+    categories: categoryRows.map((row) => ({ id: String(row.id), name: String(row.name) })),
+    statuses: statusRows.map((row) => ({ id: String(row.id), name: String(row.name) })),
+    defaults: {
+      category: defaultCategory ? String(defaultCategory.name) : "",
+      status: defaultStatus ? String(defaultStatus.name) : "",
+    },
+  };
+}
+
 function todayInSaoPaulo() {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Sao_Paulo",

@@ -1,11 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { createTicketFromExtension, DuplicateTicketError, ExtensionTicketValidationError } from "@/lib/repository";
+import { createTicketFromExtension, DuplicateTicketError, ExtensionTicketValidationError, getExtensionOptions } from "@/lib/repository";
 import { ExtensionTicketInput } from "@/lib/types";
 
 const responseHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Authorization, Content-Type",
   "Access-Control-Max-Age": "86400",
   "Cache-Control": "no-store",
@@ -27,6 +27,17 @@ function authorized(request: Request) {
 
 export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: responseHeaders });
+}
+
+export async function GET(request: Request) {
+  if (!process.env.EXTENSION_API_KEY?.trim()) return json({ error: "A integração da extensão não está configurada no servidor." }, 503);
+  if (!authorized(request)) return json({ error: "Chave da extensão inválida." }, 401);
+  try {
+    return json(await getExtensionOptions(), 200);
+  } catch (error) {
+    console.error("Get extension options error", error);
+    return json({ error: "Não foi possível carregar as opções do Ticketabit." }, 500);
+  }
 }
 
 export async function POST(request: Request) {
