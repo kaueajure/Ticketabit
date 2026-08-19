@@ -11,6 +11,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="pt-BR">
+      <head><meta name="ticketabit-extension" content="v1" /></head>
       <body>
         <AppProvider>
           <AppShell>{children}</AppShell>

@@ -62,9 +62,19 @@ O arquivo `database/schema.sql` contém as tabelas:
 - `statuses`;
 - `tickets`;
 - `ticket_responsibles`;
-- `ticket_history`.
+- `ticket_history`;
 - `note_folders`;
-- `notes`.
+- `notes` (arquivos de texto e checklist com conteúdo em blocos).
 
 As senhas são armazenadas apenas como hash bcrypt. A autenticação gera uma sessão assinada em cookie `httpOnly`, `SameSite=Lax` e `Secure` em produção.
 Todos os usuários possuem as mesmas permissões no sistema.
+
+## Integração direta com a Ticketensão
+
+A rota `POST /api/extension/tickets` permite que a extensão interna crie um ticket sem abrir o site. Configure no ambiente de produção:
+
+```text
+EXTENSION_API_KEY=uma_chave_aleatoria_com_32_ou_mais_caracteres
+```
+
+Gere a chave com `openssl rand -hex 32` e informe o mesmo valor nas configurações da extensão. A requisição também informa o e-mail do responsável, a categoria e o status padrão; todos são validados contra cadastros ativos. O sistema é localizado pelo nome capturado no Movidesk, tickets duplicados são recusados e o histórico registra a origem da criação.

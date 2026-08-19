@@ -138,7 +138,10 @@ Utilizar uma barra de navegação compacta, centralizada na parte inferior, cont
 
 * Dashboard
 * Tickets
+* Anotações
 * Configurações
+
+Exibir somente os ícones na barra, sem os nomes escritos. Manter nomes acessíveis e tooltips para identificação ao passar o mouse.
 
 A barra deve possuir um botão para ser escondida. Quando estiver fechada, manter um controle discreto para mostrá-la novamente e guardar a preferência no navegador.
 
@@ -772,12 +775,16 @@ Adicionar uma página **Anotações** à barra de navegação principal.
 Cada usuário deve possuir seu próprio espaço de anotações no banco de dados. O usuário pode:
 
 * criar, renomear e excluir pastas;
-* criar vários arquivos de texto dentro de cada pasta;
+* criar páginas do tipo texto ou checklist dentro de cada pasta;
+* escolher o tipo ao criar um arquivo;
+* escolher um responsável diferente para cada item de checklist;
 * mover um arquivo para outra pasta;
 * editar o nome e o conteúdo do arquivo;
-* combinar blocos de texto normal, título, Markdown, checklist, citação e código;
-* reordenar e excluir blocos;
-* visualizar uma prévia segura do Markdown;
+* escrever em uma superfície simples, sem seletores de tipo ou barra de blocos;
+* manter arquivos de texto em um único bloco de notas, sem separar o conteúdo em blocos ou parágrafos independentes;
+* usar `Enter` ou `Shift+Enter` apenas para quebrar a linha no bloco de notas;
+* em checklists, usar `Enter` para criar um novo item e `Shift+Enter` para quebrar a linha no item atual;
+* acompanhar o progresso dos itens de checklist;
 * salvar com botão ou pelo atalho `Ctrl/Cmd + S`.
 
 A exclusão de uma pasta deve pedir confirmação e excluir também seus arquivos. As anotações não devem ser mockadas nem armazenadas somente no navegador.
@@ -836,6 +843,7 @@ Um ticket pode possuir um ou vários responsáveis.
 * folder_id
 * user_id
 * title
+* type (`text` ou `checklist`)
 * content
 * created_at
 * updated_at

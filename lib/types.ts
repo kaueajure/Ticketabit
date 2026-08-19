@@ -67,6 +67,24 @@ export interface TicketInput {
   finishedAt: string | null;
 }
 
+export interface ExtensionTicketInput {
+  ticketNumber: string;
+  title: string;
+  system: string;
+  responsibleEmail: string;
+  category: string;
+  status?: string;
+}
+
+export interface ExtensionTicketResult {
+  id: string;
+  ticketNumber: string;
+  system: string;
+  category: string;
+  status: string;
+  responsible: string;
+}
+
 export type TicketImportField = "ticketNumber" | "system" | "status" | "category" | "description" | "responsible" | "receivedAt" | "finishedAt";
 
 export interface TicketImportRow {
@@ -98,6 +116,7 @@ export interface AppData {
   users: User[];
 }
 
+export type NoteFileType = "text" | "checklist";
 export type NoteBlockType = "text" | "heading" | "markdown" | "checklist" | "quote" | "code";
 
 export interface NoteBlock {
@@ -105,6 +124,7 @@ export interface NoteBlock {
   type: NoteBlockType;
   content: string;
   checked?: boolean;
+  responsibleId?: string;
 }
 
 export interface NoteFolder {
@@ -119,6 +139,7 @@ export interface NoteFile {
   id: string;
   folderId: string;
   title: string;
+  type: NoteFileType;
   content: string;
   createdAt: string;
   updatedAt: string;

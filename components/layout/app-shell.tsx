@@ -45,7 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className={`app-shell ${dockVisible ? "" : "dock-hidden"}`}>
+    <div className={`app-shell ${dockVisible ? "" : "dock-hidden"} ${pathname.startsWith("/anotacoes") ? "notes-route" : ""}`}>
       <div className="app-content">
         <header className="topbar">
           <Link href="/" className="topbar-brand" aria-label="Ir para o dashboard">
@@ -58,7 +58,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <kbd>⌘ K</kbd>
           </label>
           <div className="topbar-actions">
-            <button className="primary-button new-ticket-button" onClick={openNewTicket}><Plus size={16} />Novo ticket</button>
+            {!pathname.startsWith("/anotacoes") && <button className="primary-button new-ticket-button" onClick={openNewTicket}><Plus size={16} />Novo ticket</button>}
             <div className="topbar-profile">
               <button className="header-avatar" onClick={() => setProfileOpen(!profileOpen)} aria-label="Abrir perfil" aria-expanded={profileOpen}><Avatar name={currentUser.name} photoUrl={currentUser.avatarUrl} /></button>
               {profileOpen && (
@@ -79,9 +79,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           {nav.map(({ href, label, icon: Icon }) => {
             const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
             return (
-              <Link href={href} key={href} className={`dock-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>
+              <Link href={href} key={href} className={`dock-item ${active ? "active" : ""}`} aria-label={label} title={label} aria-current={active ? "page" : undefined}>
                 <Icon size={18} strokeWidth={1.9} />
-                <span>{label}</span>
               </Link>
             );
           })}
@@ -95,7 +94,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span>Mostrar navegação</span>
         </button>
       )}
-      <button className="mobile-new-ticket" onClick={openNewTicket} aria-label="Novo ticket"><Plus size={23} /></button>
+      {pathname.startsWith("/tickets") && <button className="mobile-new-ticket" onClick={openNewTicket} aria-label="Novo ticket"><Plus size={23} /></button>}
       <TicketFormModal />
       <TicketDrawer />
       <Toast />

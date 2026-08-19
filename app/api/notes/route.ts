@@ -17,9 +17,11 @@ export async function POST(request: Request) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
-    const body = await request.json() as { folderId?: string; title?: string };
-    if (typeof body.folderId !== "string" || typeof body.title !== "string") return NextResponse.json({ error: "Informe a pasta e o nome do arquivo." }, { status: 400 });
-    const id = await createNoteFile(user.id, body.folderId, body.title);
+    const body = await request.json() as { folderId?: string; title?: string; type?: string };
+    if (typeof body.folderId !== "string" || typeof body.title !== "string" || typeof body.type !== "string") {
+      return NextResponse.json({ error: "Informe a pasta, o nome e o tipo do arquivo." }, { status: 400 });
+    }
+    const id = await createNoteFile(user.id, body.folderId, body.title, body.type);
     return NextResponse.json({ id }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Não foi possível criar o arquivo.";

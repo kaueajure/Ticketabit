@@ -35,6 +35,7 @@ create table if not exists notes (
   folder_id char(36) not null,
   user_id char(36) not null,
   title varchar(180) not null,
+  type varchar(20) not null default 'text',
   content longtext not null,
   created_at timestamp not null default current_timestamp,
   updated_at timestamp not null default current_timestamp on update current_timestamp,
@@ -43,6 +44,9 @@ create table if not exists notes (
   index idx_notes_folder (folder_id, updated_at),
   index idx_notes_user (user_id, updated_at)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+
+-- Bancos criados pela versão anterior de Anotações não possuíam o tipo do arquivo.
+alter table notes add column if not exists type varchar(20) not null default 'text' after title;
 
 create table if not exists systems (
   id varchar(64) primary key,

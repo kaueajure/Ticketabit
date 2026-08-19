@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { RowDataPacket } from "mysql2/promise";
 import { execute, query, withTransaction } from "@/lib/db";
-import { AppData, Category, HistoryEntry, StatusDefinition, SystemItem, Ticket, TicketImportError, TicketImportRow, TicketInput, User } from "@/lib/types";
+import { AppData, Category, ExtensionTicketInput, ExtensionTicketResult, HistoryEntry, StatusDefinition, SystemItem, Ticket, TicketImportError, TicketImportRow, TicketInput, User } from "@/lib/types";
 
 interface SystemRow extends RowDataPacket, Omit<SystemItem, "active"> { active: boolean | number; }
 interface CategoryRow extends RowDataPacket, Omit<Category, "active"> { active: boolean | number; }
@@ -52,7 +52,7 @@ export class DuplicateTicketError extends Error {
   }
 }
 
-export async function createTicket(input: TicketInput, user: User) {
+export async function createTicket(input: TicketInput, user: User, historyMessage = "Ticket criado") {
   const id = randomUUID();
   const historyId = randomUUID();
   const responsibleIds = [...new Set(input.responsibleIds)];
@@ -77,8 +77,8 @@ export async function createTicket(input: TicketInput, user: User) {
       responsibleIds.flatMap((responsibleId) => [id, responsibleId]),
     );
     await connection.execute(
-      "insert into ticket_history (id, ticket_id, user_id, field, new_value) values (?, ?, ?, 'Ticket', 'Ticket criado')",
-      [historyId, id, user.id],
+      "insert into ticket_history (id, ticket_id, user_id, field, new_value) values (?, ?, ?, 'Ticket', ?)",
+      [historyId, id, user.id, historyMessage],
     );
   });
   return id;
@@ -93,6 +93,95 @@ export class TicketImportValidationError extends Error {
 
 function normalizedLookupValue(value: string) {
   return value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+}
+
+export class ExtensionTicketValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ExtensionTicketValidationError";
+  }
+}
+
+function todayInSaoPaulo() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+function findUniqueNamedRow(rows: RowDataPacket[], input: string, label: string, partial = false) {
+  const requested = normalizedLookupValue(input);
+  const exact = rows.find((row) => normalizedLookupValue(String(row.name)) === requested || String(row.id ?? "") === input);
+  if (exact) return exact;
+  if (partial && requested) {
+    const matches = rows.filter((row) => {
+      const candidate = normalizedLookupValue(String(row.name));
+      return candidate.includes(requested) || requested.includes(candidate);
+    });
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1) throw new ExtensionTicketValidationError(`${label} “${input}” corresponde a mais de uma opção ativa.`);
+  }
+  throw new ExtensionTicketValidationError(`${label} “${input}” não encontrado entre as opções ativas.`);
+}
+
+export async function createTicketFromExtension(input: ExtensionTicketInput): Promise<ExtensionTicketResult> {
+  const ticketNumber = String(input.ticketNumber ?? "").trim().replace(/^#/, "");
+  const title = String(input.title ?? "").trim();
+  const systemName = String(input.system ?? "").trim();
+  const categoryName = String(input.category ?? "").trim();
+  const statusName = String(input.status ?? "Não iniciado").trim() || "Não iniciado";
+  const responsibleEmail = String(input.responsibleEmail ?? "").trim();
+
+  if (!ticketNumber || ticketNumber.length > 80) throw new ExtensionTicketValidationError("Informe um número de ticket válido com até 80 caracteres.");
+  if (!title) throw new ExtensionTicketValidationError("A extensão não encontrou o título do ticket.");
+  if (Buffer.byteLength(title, "utf8") > 65535) throw new ExtensionTicketValidationError("O título do ticket ultrapassa o tamanho permitido.");
+  if (!systemName) throw new ExtensionTicketValidationError("A extensão não encontrou o sistema do ticket.");
+  if (!categoryName) throw new ExtensionTicketValidationError("Configure a categoria padrão na extensão.");
+  if (!responsibleEmail || responsibleEmail.length > 190) throw new ExtensionTicketValidationError("Configure o e-mail do responsável na extensão.");
+
+  const [systemRows, categoryRows, statusRows, userRows] = await Promise.all([
+    query<RowDataPacket[]>("select id, name from systems where active = true order by name"),
+    query<RowDataPacket[]>("select id, name from categories where active = true order by name"),
+    query<RowDataPacket[]>("select name from statuses where active = true order by position, name"),
+    query<RowDataPacket[]>("select id, name, email from users where active = true and lower(email) = lower(?) limit 2", [responsibleEmail]),
+  ]);
+
+  const system = findUniqueNamedRow(systemRows, systemName, "Sistema", true);
+  const category = findUniqueNamedRow(categoryRows, categoryName, "Categoria");
+  const status = findUniqueNamedRow(statusRows, statusName, "Status");
+  const userRow = userRows[0];
+  if (!userRow) throw new ExtensionTicketValidationError(`Responsável “${responsibleEmail}” não encontrado entre os usuários ativos.`);
+
+  const user: User = {
+    id: String(userRow.id),
+    name: String(userRow.name),
+    email: String(userRow.email),
+    active: true,
+    avatarUrl: null,
+  };
+  const id = await createTicket({
+    ticketNumber,
+    systemId: String(system.id),
+    status: String(status.name),
+    categoryId: String(category.id),
+    description: title,
+    responsibleIds: [user.id],
+    receivedAt: todayInSaoPaulo(),
+    finishedAt: null,
+  }, user, "Ticket criado pela extensão do Movidesk");
+
+  return {
+    id,
+    ticketNumber,
+    system: String(system.name),
+    category: String(category.name),
+    status: String(status.name),
+    responsible: user.name,
+  };
 }
 
 function parseImportDate(value: string) {
