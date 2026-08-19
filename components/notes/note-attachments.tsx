@@ -1,24 +1,19 @@
 "use client";
 
 import { CSSProperties, MouseEvent, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ImageIcon, MessageSquareText, Paperclip, Trash2 } from "lucide-react";
+import { MessageSquareText, Paperclip, Trash2 } from "lucide-react";
 import { NoteAttachment } from "@/lib/types";
 
 export function AttachmentBadge({ attachment, onRemove, onAdd, className = "" }: { attachment: NoteAttachment; onRemove: () => void; onAdd?: (event: MouseEvent<HTMLButtonElement>) => void; className?: string }) {
   const imageSource = attachment.dataUrl || (attachment.fileId ? `/api/notes/attachments/${encodeURIComponent(attachment.fileId)}` : "");
   return <span className={"note-attachment " + className}>
-    <button type="button" className="note-attachment-icon" onClick={onAdd} aria-label={attachment.type === "image" ? "Imagem anexada: " + attachment.name : "Comentário anexado"} title={onAdd ? "Ver anexo ou adicionar outro" : undefined}>
+    <button type="button" className="note-attachment-icon" onClick={onAdd} aria-label={attachment.type === "image" ? "Imagem anexada" : "Comentário anexado"} title={onAdd ? "Ver anexo ou adicionar outro" : undefined}>
       <Paperclip size={12}/>
     </button>
     <span className={"note-attachment-preview " + attachment.type}>
-      <span className="note-attachment-preview-head">
-        {attachment.type === "image" ? <ImageIcon size={13}/> : <MessageSquareText size={13}/>}
-        <strong>{attachment.type === "image" ? attachment.name : "Comentário"}</strong>
-        <button type="button" onClick={(event) => { event.stopPropagation(); onRemove(); }} aria-label="Remover anexo"><Trash2 size={12}/></button>
-      </span>
       {attachment.type === "image"
-        ? <img src={imageSource} alt={attachment.name || "Imagem anexada"}/>
-        : <p>{attachment.comment}</p>}
+        ? <><button type="button" className="note-attachment-image-delete" onClick={(event) => { event.stopPropagation(); onRemove(); }} aria-label="Remover imagem"><Trash2 size={12}/></button><img src={imageSource} alt="Imagem anexada"/></>
+        : <><span className="note-attachment-preview-head"><MessageSquareText size={13}/><strong>Comentário</strong><button type="button" onClick={(event) => { event.stopPropagation(); onRemove(); }} aria-label="Remover anexo"><Trash2 size={12}/></button></span><p>{attachment.comment}</p></>}
     </span>
   </span>;
 }
@@ -51,12 +46,13 @@ export function TextNotepad({ lineId, content, attachments, onChange, onAttachme
       const marker = mirror.querySelector<HTMLElement>('[data-attachment-marker="' + attachment.id + '"]');
       if (!marker) continue;
       const markerRect = marker.getBoundingClientRect();
-      const stackKey = String(attachment.position);
+      const rawTop = markerRect.top - shellRect.top - textarea.scrollTop - 1;
+      const stackKey = String(Math.round(rawTop));
       const stack = stacks.get(stackKey) ?? 0;
       stacks.set(stackKey, stack + 1);
       next[attachment.id] = {
-        left: Math.max(0, Math.min(markerRect.left - shellRect.left - textarea.scrollLeft + stack * 19, shell.clientWidth - 24)),
-        top: Math.max(0, markerRect.top - shellRect.top - textarea.scrollTop - 1),
+        left: Math.max(0, shell.clientWidth - 25),
+        top: Math.max(0, rawTop + stack * 21),
       };
     }
     setPositions(next);

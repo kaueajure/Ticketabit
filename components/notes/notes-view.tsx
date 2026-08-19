@@ -110,6 +110,7 @@ export function NotesView() {
   const [attachmentError, setAttachmentError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileTargetRef = useRef<AttachmentTarget | null>(null);
+  const pendingFilesRef = useRef(new Map<string, File>());
 
   const request = useCallback(async <T,>(url: string, init?: RequestInit) => {
     const response = await fetch(url, init);
@@ -187,10 +188,16 @@ export function NotesView() {
           attachments.push(attachment);
           continue;
         }
-        const blob = await fetch(attachment.dataUrl).then((response) => response.blob());
-        const formData = new FormData();
-        formData.set("file", new File([blob], attachment.name || "imagem", { type: blob.type }));
-        const uploaded = await request<{ fileId: string; name: string; mimeType: string }>("/api/notes/attachments", { method: "POST", body: formData });
+        const pendingFile = pendingFilesRef.current.get(attachment.id);
+        const blob = pendingFile ?? await fetch(attachment.dataUrl).then((response) => response.blob());
+        if (!blob) throw new Error("Não foi possível preparar a imagem para envio.");
+        const uploaded = await request<{ fileId: string; name: string; mimeType: string }>("/api/notes/attachments", {
+          method: "POST",
+          headers: { "Content-Type": blob.type, "X-File-Name": encodeURIComponent(attachment.name || "imagem") },
+          body: blob,
+        });
+        pendingFilesRef.current.delete(attachment.id);
+        if (attachment.dataUrl.startsWith("blob:")) URL.revokeObjectURL(attachment.dataUrl);
         attachments.push({ id: attachment.id, type: "image", fileId: uploaded.fileId, name: uploaded.name, mimeType: uploaded.mimeType, ...(typeof attachment.position === "number" ? { position: attachment.position } : {}) });
       }
       uploadedLines.push({ ...line, ...(attachments.length ? { attachments } : { attachments: undefined }) });
@@ -322,7 +329,13 @@ export function NotesView() {
   };
 
   const removeAttachment = (lineId: string, attachmentId: string) => {
-    setLines((current) => current.map((line) => line.id === lineId ? { ...line, attachments: line.attachments?.filter((attachment) => attachment.id !== attachmentId) } : line));
+    setLines((current) => current.map((line) => {
+      if (line.id !== lineId) return line;
+      const removed = line.attachments?.find((attachment) => attachment.id === attachmentId);
+      pendingFilesRef.current.delete(attachmentId);
+      if (removed?.dataUrl?.startsWith("blob:")) URL.revokeObjectURL(removed.dataUrl);
+      return { ...line, attachments: line.attachments?.filter((attachment) => attachment.id !== attachmentId) };
+    }));
     setDirty(true);
   };
 
@@ -345,18 +358,9 @@ export function NotesView() {
     event.target.value = "";
     if (!file || !target) return;
     if (!new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]).has(file.type)) { setAttachmentError("Use uma imagem PNG, JPEG, WebP ou GIF."); return; }
-    if (file.size > 1_500_000) { setAttachmentError("A imagem deve possuir no máximo 1,5 MB."); return; }
-    try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error());
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(file);
-      });
-      addAttachment(target, { id: window.crypto.randomUUID(), type: "image", name: file.name.slice(0, 180), dataUrl });
-    } catch {
-      setAttachmentError("Não foi possível ler a imagem selecionada.");
-    }
+    const attachmentId = window.crypto.randomUUID();
+    pendingFilesRef.current.set(attachmentId, file);
+    addAttachment(target, { id: attachmentId, type: "image", name: file.name.slice(0, 180), dataUrl: URL.createObjectURL(file) });
   };
 
   const openCommentDialog = () => {

@@ -8,8 +8,8 @@ export async function GET(_: Request, context: { params: Promise<{ fileId: strin
     if (!user) return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
     const { fileId } = await context.params;
     const attachment = await readNoteAttachment(user.id, fileId);
-    return new NextResponse(new Uint8Array(attachment.data), {
-      headers: { "Content-Type": attachment.mimeType, "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff" },
+    return new NextResponse(attachment.stream as ReadableStream, {
+      headers: { "Content-Type": attachment.mimeType, "Content-Length": String(attachment.size), "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff" },
     });
   } catch {
     return NextResponse.json({ error: "Anexo não encontrado." }, { status: 404 });
