@@ -61,6 +61,23 @@ export interface OfficialTicketHistory {
   fetchedAt: string;
 }
 
+export interface MovideskTicketSnapshot {
+  ticketNumber: string;
+  subject: string;
+  status: string;
+}
+
+export interface MovideskTicketSyncResult {
+  ticket: {
+    id: string;
+    ticketNumber: string;
+    description: string;
+    status: string;
+  };
+  changedFields: Array<"description" | "status">;
+  warnings: string[];
+}
+
 export interface Ticket {
   id: string;
   ticketNumber: string;

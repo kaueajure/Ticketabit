@@ -3,7 +3,6 @@
 import { FormEvent, useState } from "react";
 import { Box, CircleDot, Layers3, Pencil, Plus, Tag, Users, X } from "lucide-react";
 import { useApp } from "@/components/providers/app-provider";
-import { PageHeader } from "@/components/layout/page-header";
 import { Avatar } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Category, StatusColor, StatusDefinition, SystemItem, User } from "@/lib/types";
@@ -79,8 +78,7 @@ export function SettingsView() {
   };
 
   return (
-    <div className="page settings-page">
-      <PageHeader eyebrow="SISTEMA" title="Configurações" description="Gerencie os dados básicos usados no Ticketabit." />
+    <div className="workspace-page settings-page">
       <div className="settings-layout">
         <aside className="settings-nav">{tabs.map(({ id, label, description, icon: Icon }) => <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}><span><Icon size={17}/></span><div><strong>{label}</strong><small>{description}</small></div></button>)}</aside>
         <section className="settings-panel">

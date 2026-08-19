@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { RowDataPacket } from "mysql2/promise";
 import { execute, query, withTransaction } from "@/lib/db";
-import { AppData, Category, ExtensionTicketInput, ExtensionTicketResult, ExtensionTicketStatusInput, ExtensionTicketStatusResult, HistoryEntry, StatusDefinition, SystemItem, Ticket, TicketImportError, TicketImportRow, TicketInput, User } from "@/lib/types";
+import { AppData, Category, ExtensionTicketInput, ExtensionTicketResult, ExtensionTicketStatusInput, ExtensionTicketStatusResult, HistoryEntry, MovideskTicketSnapshot, MovideskTicketSyncResult, StatusDefinition, SystemItem, Ticket, TicketImportError, TicketImportRow, TicketInput, User } from "@/lib/types";
 
 interface SystemRow extends RowDataPacket, Omit<SystemItem, "active"> { active: boolean | number; }
 interface CategoryRow extends RowDataPacket, Omit<Category, "active"> { active: boolean | number; }
@@ -95,6 +95,10 @@ function normalizedLookupValue(value: string) {
   return value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
 }
 
+function normalizedStatusLookupValue(value: string) {
+  return normalizedLookupValue(value).split(/\s+/).map((word) => word.length > 4 && word.endsWith("s") && !word.endsWith("us") ? word.slice(0, -1) : word).join(" ");
+}
+
 export class ExtensionTicketValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -140,6 +144,60 @@ export async function getExtensionTicket(ticketNumberInput: string) {
 export async function getTicketNumberById(id: string) {
   const rows = await query<RowDataPacket[]>("select ticket_number as ticketNumber from tickets where id = ? limit 1", [id]);
   return rows[0] ? String(rows[0].ticketNumber) : null;
+}
+
+export async function syncTicketFromMovidesk(id: string, snapshot: MovideskTicketSnapshot, user: User): Promise<MovideskTicketSyncResult> {
+  if (Buffer.byteLength(snapshot.subject, "utf8") > 65535) throw new Error("O assunto retornado pelo Movidesk ultrapassa o tamanho permitido.");
+
+  return withTransaction(async (connection) => {
+    const [ticketRows] = await connection.execute<RowDataPacket[]>(
+      "select id, ticket_number as ticketNumber, description, status from tickets where id = ? for update",
+      [id],
+    );
+    const ticket = ticketRows[0];
+    if (!ticket) throw new Error("Ticket não encontrado.");
+    if (String(ticket.ticketNumber) !== snapshot.ticketNumber) throw new Error("O número do ticket mudou durante a sincronização.");
+
+    const [statusRows] = await connection.execute<RowDataPacket[]>("select name from statuses where active = true order by position, name");
+    const requestedStatus = normalizedLookupValue(snapshot.status);
+    const matchingStatus = statusRows.find((row) => normalizedLookupValue(String(row.name)) === requestedStatus)
+      ?? statusRows.find((row) => normalizedStatusLookupValue(String(row.name)) === normalizedStatusLookupValue(snapshot.status));
+    const warnings: string[] = [];
+    if (!matchingStatus) warnings.push(`O status “${snapshot.status}” existe no Movidesk, mas não está configurado como ativo no Ticketabit.`);
+
+    const previousDescription = String(ticket.description);
+    const previousStatus = String(ticket.status);
+    const nextDescription = snapshot.subject;
+    const nextStatus = matchingStatus ? String(matchingStatus.name) : previousStatus;
+    const changedFields: MovideskTicketSyncResult["changedFields"] = [];
+    if (previousDescription !== nextDescription) changedFields.push("description");
+    if (previousStatus !== nextStatus) changedFields.push("status");
+
+    if (changedFields.length) {
+      await connection.execute(
+        "update tickets set description = ?, status = ?, updated_by = ? where id = ?",
+        [nextDescription, nextStatus, user.id, id],
+      );
+      if (changedFields.includes("description")) {
+        await connection.execute(
+          "insert into ticket_history (id, ticket_id, user_id, field, previous_value, new_value) values (?, ?, ?, 'Assunto (sincronização Movidesk)', ?, ?)",
+          [randomUUID(), id, user.id, previousDescription, nextDescription],
+        );
+      }
+      if (changedFields.includes("status")) {
+        await connection.execute(
+          "insert into ticket_history (id, ticket_id, user_id, field, previous_value, new_value) values (?, ?, ?, 'Status (sincronização Movidesk)', ?, ?)",
+          [randomUUID(), id, user.id, previousStatus, nextStatus],
+        );
+      }
+    }
+
+    return {
+      ticket: { id, ticketNumber: snapshot.ticketNumber, description: nextDescription, status: nextStatus },
+      changedFields,
+      warnings,
+    };
+  });
 }
 
 function todayInSaoPaulo() {

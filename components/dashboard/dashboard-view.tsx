@@ -3,15 +3,12 @@
 import Link from "next/link";
 import { ArrowRight, Clock3, TicketCheck, Timer, CirclePause, FlaskConical } from "lucide-react";
 import { useApp } from "@/components/providers/app-provider";
-import { PageHeader } from "@/components/layout/page-header";
-import { formatDate, relativeTime } from "@/lib/utils";
+import { relativeTime } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 export function DashboardView() {
-  const { tickets, users, systems, statuses, currentUser, openTicket } = useApp();
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+  const { tickets, users, systems, statuses, openTicket } = useApp();
   const stats = [
     { label: "Total de tickets", value: tickets.length, hint: "em todos os status", icon: TicketCheck, tone: "neutral" },
     { label: "Em atendimento", value: tickets.filter((item) => item.status === "Em atendimento").length, hint: "demandas ativas", icon: Timer, tone: "blue" },
@@ -23,8 +20,7 @@ export function DashboardView() {
   const waiting = tickets.filter((item) => ["Não iniciado", "Em atendimento", "Em espera"].includes(item.status)).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt)).slice(0, 5);
 
   return (
-    <div className="page dashboard-page">
-      <PageHeader eyebrow="VISÃO GERAL" title={<>{greeting}, {currentUser?.name.split(" ")[0]}</>} description="Aqui está o resumo das demandas da sua equipe." />
+    <div className="workspace-page dashboard-page">
       <div className="stat-grid">
         {stats.map(({ label, value, hint, icon: Icon, tone }) => <div className="stat-card" key={label}><div><span>{label}</span><strong>{value}</strong><small>{hint}</small></div><span className={`stat-icon stat-${tone}`}><Icon size={18}/></span></div>)}
       </div>
@@ -51,7 +47,6 @@ export function DashboardView() {
           </div>
         </section>
       </div>
-      <p className="dashboard-footnote">Dados atualizados agora · {formatDate(new Date().toISOString(), true)}</p>
     </div>
   );
 }

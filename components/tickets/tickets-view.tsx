@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Check, ChevronDown, Download, Filter, Search, SlidersHorizontal, Upload } from "lucide-react";
 import { useApp } from "@/components/providers/app-provider";
-import { PageHeader } from "@/components/layout/page-header";
 import { Ticket, TicketStatus } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
@@ -90,17 +89,19 @@ export function TicketsView() {
   const SortIcon = ({ column }: { column: SortKey }) => sortKey !== column ? <span className="sort-idle">↕</span> : sortDirection === "asc" ? <ArrowUp size={13} /> : <ArrowDown size={13} />;
 
   return (
-    <div className="page tickets-page">
-      <PageHeader eyebrow="GESTÃO" title="Tickets" description="Acompanhe e atualize todas as demandas em um só lugar." actions={<><button className="secondary-button" onClick={() => setCsvImportOpen(true)}><Upload size={15} />Importar CSV/Excel</button><button className="secondary-button" onClick={exportCsv}><Download size={15} />Exportar CSV</button></>} />
-      <div className="quick-counters" role="tablist">
-        <button className={status === EXECUTION_FILTER ? "active" : ""} onClick={() => setStatus(EXECUTION_FILTER)}><span>Execução</span><strong>{executionCount}</strong></button>
-        <button className={!status ? "active" : ""} onClick={() => setStatus("")}><span>Todos</span><strong>{tickets.length}</strong></button>
-        {statuses.map((configuredStatus) => (
-          <button key={configuredStatus.id} className={status === configuredStatus.name ? "active" : ""} onClick={() => setStatus(configuredStatus.name)}>
-            <i className={`dot-${configuredStatus.color}`}/><span>{configuredStatus.name}</span><strong>{statusCounts.get(configuredStatus.name) ?? 0}</strong>
-          </button>
-        ))}
-      </div>
+    <div className="workspace-page tickets-page">
+      <header className="tickets-workspace-header">
+        <div className="quick-counters" role="tablist">
+          <button className={status === EXECUTION_FILTER ? "active" : ""} onClick={() => setStatus(EXECUTION_FILTER)}><span>Execução</span><strong>{executionCount}</strong></button>
+          <button className={!status ? "active" : ""} onClick={() => setStatus("")}><span>Todos</span><strong>{tickets.length}</strong></button>
+          {statuses.map((configuredStatus) => (
+            <button key={configuredStatus.id} className={status === configuredStatus.name ? "active" : ""} onClick={() => setStatus(configuredStatus.name)}>
+              <i className={`dot-${configuredStatus.color}`}/><span>{configuredStatus.name}</span><strong>{statusCounts.get(configuredStatus.name) ?? 0}</strong>
+            </button>
+          ))}
+        </div>
+        <div className="tickets-workspace-actions"><button className="secondary-button" onClick={() => setCsvImportOpen(true)}><Upload size={15} /><span>Importar</span></button><button className="secondary-button" onClick={exportCsv}><Download size={15} /><span>Exportar</span></button></div>
+      </header>
       <div className="table-card">
         <div className="table-toolbar">
           <span className="table-result-count">{filtered.length} {filtered.length === 1 ? "ticket" : "tickets"}</span>

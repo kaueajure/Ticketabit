@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { CalendarDays, Clock3, Trash2, X } from "lucide-react";
+import { CalendarDays, Clock3, RefreshCw, Trash2, X } from "lucide-react";
 import { useApp } from "@/components/providers/app-provider";
-import { OfficialTicketHistory, TicketStatus } from "@/lib/types";
+import { MovideskTicketSyncResult, OfficialTicketHistory, TicketStatus } from "@/lib/types";
 import { formatDate, relativeTime } from "@/lib/utils";
 import { readApiJson } from "@/lib/client-http";
 import { Avatar } from "@/components/ui/avatar";
@@ -12,8 +12,9 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { ResponsiblePicker } from "@/components/tickets/responsible-picker";
 
 export function TicketDrawer() {
-  const { selectedTicketId, closeTicket, tickets, systems, categories, statuses, users, updateTicket, deleteTicket } = useApp();
+  const { selectedTicketId, closeTicket, tickets, systems, categories, statuses, users, updateTicket, deleteTicket, reloadData, showNotice } = useApp();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [officialHistory, setOfficialHistory] = useState<OfficialTicketHistory | null>(null);
   const [officialHistoryLoading, setOfficialHistoryLoading] = useState(false);
@@ -24,6 +25,7 @@ export function TicketDrawer() {
 
   useEffect(() => {
     setConfirmDelete(false);
+    setSyncing(false);
     setHistoryOpen(false);
     setOfficialHistory(null);
     setOfficialHistoryLoading(false);
@@ -63,13 +65,33 @@ export function TicketDrawer() {
   const lastUpdaterName = ticket.history.at(-1)?.userName ?? responsibles[0]?.name ?? "Usuário";
   const lastUpdater = users.find((item) => item.name === lastUpdaterName);
 
+  const syncFromMovidesk = async () => {
+    setSyncing(true);
+    try {
+      const response = await fetch(`/api/tickets/${encodeURIComponent(ticket.id)}/movidesk-sync`, { method: "POST" });
+      const result = await readApiJson<MovideskTicketSyncResult & { error?: string }>(response);
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível sincronizar o ticket.");
+      setDescription(result.ticket.description);
+      setOfficialHistory(null);
+      await reloadData();
+      if (historyOpen) setOfficialHistoryReload((value) => value + 1);
+      if (result.warnings.length) showNotice(result.warnings[0]);
+      else if (!result.changedFields.length) showNotice("O ticket já está sincronizado com o Movidesk");
+      else showNotice(`Ticket sincronizado: ${result.changedFields.map((field) => field === "description" ? "assunto" : "status").join(" e ")}`);
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Não foi possível sincronizar o ticket.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return createPortal(
     <div className="drawer-layer ticket-details-layer" role="dialog" aria-modal="true" aria-labelledby="ticket-details-title">
       <button className="drawer-backdrop" onClick={closeTicket} aria-label="Fechar modal" />
       <aside className="ticket-drawer">
         <div className="drawer-header">
           <div className="drawer-breadcrumb"><span>Tickets</span><span>/</span><strong id="ticket-details-title">#{ticket.ticketNumber}</strong></div>
-          <div><button className="icon-button" onClick={closeTicket} aria-label="Fechar"><X size={19} /></button></div>
+          <div><button className="drawer-sync-button" onClick={() => void syncFromMovidesk()} disabled={syncing}><RefreshCw className={syncing ? "spin" : ""} size={14}/><span>{syncing ? "Sincronizando..." : "Sincronizar"}</span></button><button className="icon-button" onClick={closeTicket} aria-label="Fechar"><X size={19} /></button></div>
         </div>
         <div className="drawer-content">
           <div className="drawer-title-row">

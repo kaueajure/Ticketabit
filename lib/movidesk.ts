@@ -1,6 +1,6 @@
 import "server-only";
 
-import { OfficialHistoryEvent, OfficialHistoryEventKind, OfficialTicketHistory } from "@/lib/types";
+import { MovideskTicketSnapshot, OfficialHistoryEvent, OfficialHistoryEventKind, OfficialTicketHistory } from "@/lib/types";
 
 interface MovideskPerson {
   businessName?: unknown;
@@ -22,6 +22,8 @@ interface MovideskOwnerHistory {
 
 interface MovideskTicketHistoryResponse {
   id?: unknown;
+  subject?: unknown;
+  status?: unknown;
   createdDate?: unknown;
   lastActionDate?: unknown;
   actionCount?: unknown;
@@ -119,7 +121,7 @@ export function mapMovideskTicketHistory(ticketNumber: string, ticket: MovideskT
   };
 }
 
-export async function getMovideskTicketHistory(ticketNumber: string): Promise<OfficialTicketHistory> {
+async function requestMovideskTicket(ticketNumber: string, select: string, expand?: string): Promise<MovideskTicketHistoryResponse> {
   const token = process.env.MOVIDESK_API_TOKEN?.trim();
   if (!token) throw new MovideskHistoryError("A integração com o Movidesk ainda não foi configurada.", 503);
 
@@ -127,8 +129,8 @@ export async function getMovideskTicketHistory(ticketNumber: string): Promise<Of
   const url = new URL(`${baseUrl}/tickets`);
   url.searchParams.set("token", token);
   url.searchParams.set("id", ticketNumber);
-  url.searchParams.set("$select", "id,createdDate,lastActionDate,actionCount,reopenedIn,resolvedIn,closedIn");
-  url.searchParams.set("$expand", "ownerHistories,statusHistories");
+  url.searchParams.set("$select", select);
+  if (expand) url.searchParams.set("$expand", expand);
 
   let response: Response;
   try {
@@ -159,5 +161,24 @@ export async function getMovideskTicketHistory(ticketNumber: string): Promise<Of
     throw new MovideskHistoryError(`Ticket #${ticketNumber} não encontrado no Movidesk.`, 404);
   }
 
+  return result;
+}
+
+export async function getMovideskTicketHistory(ticketNumber: string): Promise<OfficialTicketHistory> {
+  const result = await requestMovideskTicket(
+    ticketNumber,
+    "id,createdDate,lastActionDate,actionCount,reopenedIn,resolvedIn,closedIn",
+    "ownerHistories,statusHistories",
+  );
+
   return mapMovideskTicketHistory(ticketNumber, result);
+}
+
+export async function getMovideskTicketSnapshot(ticketNumber: string): Promise<MovideskTicketSnapshot> {
+  const result = await requestMovideskTicket(ticketNumber, "id,subject,status");
+  const subject = text(result.subject);
+  const status = text(result.status);
+  if (!subject) throw new MovideskHistoryError("O ticket do Movidesk não possui um assunto válido.", 422);
+  if (!status) throw new MovideskHistoryError("O ticket do Movidesk não possui um status válido.", 422);
+  return { ticketNumber, subject, status };
 }

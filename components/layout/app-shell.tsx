@@ -24,6 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { currentUser, loading, loadError, reloadData, openNewTicket, globalSearch, setGlobalSearch } = useApp();
   const [profileOpen, setProfileOpen] = useState(false);
   const [dockVisible, setDockVisible] = useState(true);
+  const workspaceRoute = pathname === "/" || pathname.startsWith("/tickets") || pathname.startsWith("/anotacoes") || pathname.startsWith("/configuracoes");
 
   useEffect(() => {
     setDockVisible(window.localStorage.getItem("ticketabit:dock-visible") !== "false");
@@ -46,7 +47,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className={`app-shell ${dockVisible ? "" : "dock-hidden"} ${pathname.startsWith("/anotacoes") ? "notes-route" : ""}`}>
+    <div className={`app-shell ${dockVisible ? "" : "dock-hidden"} ${workspaceRoute ? "workspace-route" : ""}`}>
       <div className="app-content">
         <header className="topbar">
           <Link href="/" className="topbar-brand" aria-label="Ir para o dashboard">
@@ -73,7 +74,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
-        <main className={`main-content ${pathname.startsWith("/tickets") ? "tickets-main" : pathname.startsWith("/anotacoes") ? "notes-main" : ""}`}>{children}</main>
+        <main className={`main-content ${workspaceRoute ? "workspace-main" : ""}`}>{children}</main>
       </div>
       {dockVisible ? (
         <nav className="bottom-dock" aria-label="Navegação principal">
