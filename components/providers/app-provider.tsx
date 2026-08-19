@@ -52,7 +52,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     setLoadError(null);
     try {
-      const response = await fetch("/api/bootstrap", { cache: "no-store" });
+      const response = await fetch("/api/bootstrap", { cache: "no-store", signal: AbortSignal.timeout(15_000) });
       if (response.status === 401) {
         window.location.replace(`/login?next=${encodeURIComponent(window.location.pathname)}`);
         return;
@@ -67,7 +67,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setData(appData as AppData);
       setCurrentUser(authenticatedUser as User);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Não foi possível conectar ao banco de dados.");
+      setLoadError(error instanceof DOMException && error.name === "TimeoutError"
+        ? "O servidor demorou demais para responder. Tente novamente."
+        : error instanceof Error ? error.message : "Não foi possível conectar ao banco de dados.");
     } finally {
       setLoading(false);
       setHydrated(true);

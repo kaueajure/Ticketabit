@@ -4,11 +4,11 @@ import { CSSProperties, MouseEvent, useCallback, useLayoutEffect, useMemo, useRe
 import { ImageIcon, MessageSquareText, Paperclip, Trash2 } from "lucide-react";
 import { NoteAttachment } from "@/lib/types";
 
-export function AttachmentBadge({ attachment, onRemove, className = "" }: { attachment: NoteAttachment; onRemove: () => void; className?: string }) {
+export function AttachmentBadge({ attachment, onRemove, onAdd, className = "" }: { attachment: NoteAttachment; onRemove: () => void; onAdd?: (event: MouseEvent<HTMLButtonElement>) => void; className?: string }) {
   const imageSource = attachment.dataUrl || (attachment.fileId ? `/api/notes/attachments/${encodeURIComponent(attachment.fileId)}` : "");
   return <span className={"note-attachment " + className}>
-    <button type="button" className="note-attachment-icon" aria-label={attachment.type === "image" ? "Imagem anexada: " + attachment.name : "Comentário anexado"}>
-      <Paperclip size={13}/>
+    <button type="button" className="note-attachment-icon" onClick={onAdd} aria-label={attachment.type === "image" ? "Imagem anexada: " + attachment.name : "Comentário anexado"} title={onAdd ? "Ver anexo ou adicionar outro" : undefined}>
+      <Paperclip size={12}/>
     </button>
     <span className={"note-attachment-preview " + attachment.type}>
       <span className="note-attachment-preview-head">
