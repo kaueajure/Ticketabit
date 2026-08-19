@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Eye, EyeOff, LockKeyhole, Mail, Ticket } from "lucide-react";
+import { Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
 import { readApiJson } from "@/lib/client-http";
+import { BrandLogo } from "@/components/ui/brand-logo";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -34,7 +35,7 @@ export default function LoginPage() {
   return (
     <main className="login-page">
       <section className="login-card">
-        <div className="login-brand"><span className="brand-mark"><Ticket size={18} strokeWidth={2.3}/></span><strong>Ticketabit</strong></div>
+        <div className="login-brand"><BrandLogo /><strong>Ticketabit</strong></div>
         <div className="login-heading"><h1>Acesse sua conta</h1><p>Entre com seus dados para gerenciar os tickets.</p></div>
         <form onSubmit={submit}>
           <label className="login-field"><span>E-mail</span><div><Mail size={16}/><input type="email" autoComplete="email" autoFocus required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="seuemail@empresa.com"/></div></label>

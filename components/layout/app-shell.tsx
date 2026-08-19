@@ -6,6 +6,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { BarChart3, ChevronDown, ChevronUp, LogOut, NotebookPen, Plus, Search, Settings, Ticket, UserRound } from "lucide-react";
 import { useApp } from "@/components/providers/app-provider";
 import { Avatar } from "@/components/ui/avatar";
+import { BrandLogo } from "@/components/ui/brand-logo";
 import { Toast } from "@/components/ui/toast";
 import { TicketFormModal } from "@/components/tickets/ticket-form-modal";
 import { TicketDrawer } from "@/components/tickets/ticket-drawer";
@@ -41,7 +42,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (pathname === "/login") return <>{children}</>;
 
   if (loading || !currentUser) {
-    return <div className="app-loading"><span className="brand-mark"><Ticket size={18}/></span>{loadError ? <><h1>Não foi possível carregar o Ticketabit</h1><p>{loadError}</p><button className="primary-button" onClick={() => void reloadData()}>Tentar novamente</button></> : <><i/><p>Conectando ao banco de dados...</p></>}</div>;
+    return <div className="app-loading"><BrandLogo />{loadError ? <><h1>Não foi possível carregar o Ticketabit</h1><p>{loadError}</p><button className="primary-button" onClick={() => void reloadData()}>Tentar novamente</button></> : <><i/><p>Conectando ao banco de dados...</p></>}</div>;
   }
 
   return (
@@ -49,7 +50,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="app-content">
         <header className="topbar">
           <Link href="/" className="topbar-brand" aria-label="Ir para o dashboard">
-            <span className="brand-mark"><Ticket size={16} strokeWidth={2.25} /></span>
+            <BrandLogo />
             <strong>Ticketabit</strong>
           </Link>
           <label className="global-search">

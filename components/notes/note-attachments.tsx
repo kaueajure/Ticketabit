@@ -1,21 +1,89 @@
 "use client";
 
 import { CSSProperties, MouseEvent, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { MessageSquareText, Paperclip, Trash2 } from "lucide-react";
 import { NoteAttachment } from "@/lib/types";
 
 export function AttachmentBadge({ attachment, onRemove, onAdd, className = "" }: { attachment: NoteAttachment; onRemove: () => void; onAdd?: (event: MouseEvent<HTMLButtonElement>) => void; className?: string }) {
   const imageSource = attachment.dataUrl || (attachment.fileId ? `/api/notes/attachments/${encodeURIComponent(attachment.fileId)}` : "");
-  return <span className={"note-attachment " + className}>
-    <button type="button" className="note-attachment-icon" onClick={onAdd} aria-label={attachment.type === "image" ? "Imagem anexada" : "Comentário anexado"} title={onAdd ? "Ver anexo ou adicionar outro" : undefined}>
-      <Paperclip size={12}/>
-    </button>
-    <span className={"note-attachment-preview " + attachment.type}>
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const previewRef = useRef<HTMLSpanElement>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewPosition, setPreviewPosition] = useState({ left: 0, top: 0, placement: "above" as "above" | "below", ready: false });
+
+  const cancelClose = useCallback(() => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = null;
+  }, []);
+
+  const showPreview = useCallback(() => {
+    cancelClose();
+    setPreviewOpen(true);
+  }, [cancelClose]);
+
+  const scheduleClose = useCallback(() => {
+    cancelClose();
+    closeTimerRef.current = setTimeout(() => setPreviewOpen(false), 140);
+  }, [cancelClose]);
+
+  const updatePreviewPosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    const preview = previewRef.current;
+    if (!trigger || !preview) return;
+    const anchor = trigger.getBoundingClientRect();
+    const previewRect = preview.getBoundingClientRect();
+    const margin = 10;
+    const gap = 7;
+    const maxLeft = Math.max(margin, window.innerWidth - previewRect.width - margin);
+    const left = Math.min(maxLeft, Math.max(margin, anchor.left + anchor.width / 2 - previewRect.width / 2));
+    const roomAbove = anchor.top - gap;
+    const roomBelow = window.innerHeight - anchor.bottom - gap;
+    const placement = roomAbove >= previewRect.height || roomAbove >= roomBelow ? "above" : "below";
+    const desiredTop = placement === "above" ? anchor.top - previewRect.height - gap : anchor.bottom + gap;
+    const maxTop = Math.max(margin, window.innerHeight - previewRect.height - margin);
+    const top = Math.min(maxTop, Math.max(margin, desiredTop));
+    setPreviewPosition({ left, top, placement, ready: true });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!previewOpen) return;
+    updatePreviewPosition();
+    window.addEventListener("resize", updatePreviewPosition);
+    window.addEventListener("scroll", updatePreviewPosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePreviewPosition);
+      window.removeEventListener("scroll", updatePreviewPosition, true);
+      cancelClose();
+    };
+  }, [cancelClose, previewOpen, updatePreviewPosition]);
+
+  const preview = previewOpen && typeof document !== "undefined" ? createPortal(
+    <span
+      ref={previewRef}
+      className={`note-attachment-preview portal ${attachment.type}`}
+      data-placement={previewPosition.placement}
+      data-ready={previewPosition.ready}
+      style={{ left: previewPosition.left, top: previewPosition.top }}
+      onMouseEnter={showPreview}
+      onMouseLeave={scheduleClose}
+    >
       {attachment.type === "image"
-        ? <><button type="button" className="note-attachment-image-delete" onClick={(event) => { event.stopPropagation(); onRemove(); }} aria-label="Remover imagem"><Trash2 size={12}/></button><img src={imageSource} alt="Imagem anexada"/></>
-        : <><span className="note-attachment-preview-head"><MessageSquareText size={13}/><strong>Comentário</strong><button type="button" onClick={(event) => { event.stopPropagation(); onRemove(); }} aria-label="Remover anexo"><Trash2 size={12}/></button></span><p>{attachment.comment}</p></>}
+        ? <><button type="button" className="note-attachment-image-delete" onClick={(event) => { event.stopPropagation(); setPreviewOpen(false); onRemove(); }} aria-label="Remover imagem"><Trash2 size={12}/></button><img src={imageSource} alt="Imagem anexada" onLoad={updatePreviewPosition}/></>
+        : <><span className="note-attachment-preview-head"><MessageSquareText size={13}/><strong>Comentário</strong><button type="button" onClick={(event) => { event.stopPropagation(); setPreviewOpen(false); onRemove(); }} aria-label="Remover anexo"><Trash2 size={12}/></button></span><p>{attachment.comment}</p></>}
+    </span>,
+    document.body,
+  ) : null;
+
+  return <>
+    <span className={"note-attachment " + className} onMouseEnter={showPreview} onMouseLeave={scheduleClose}>
+      <button ref={triggerRef} type="button" className="note-attachment-icon" onClick={(event) => { if (onAdd) { setPreviewOpen(false); onAdd(event); } }} onFocus={showPreview} onBlur={scheduleClose} aria-label={attachment.type === "image" ? "Imagem anexada" : "Comentário anexado"} title={onAdd ? "Ver anexo ou adicionar outro" : undefined}>
+        <Paperclip size={12}/>
+      </button>
     </span>
-  </span>;
+    {preview}
+  </>;
 }
 
 type TextNotepadProps = {
