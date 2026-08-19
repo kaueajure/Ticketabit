@@ -1,19 +1,34 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, Check, CheckCircle2, Circle, FileCheck2, FileText, Folder, FolderOpen,
-  LoaderCircle, Pencil, Plus, Save, Trash2, UserRound, X,
+  ImagePlus, LoaderCircle, MessageSquarePlus, Paperclip, Pencil, Plus, Save, Trash2, UserRound, X,
 } from "lucide-react";
+import { AttachmentBadge, TextNotepad } from "@/components/notes/note-attachments";
 import { useApp } from "@/components/providers/app-provider";
 import { readApiJson } from "@/lib/client-http";
-import { NoteBlock, NoteFile, NoteFileType, NoteFolder, NotesData } from "@/lib/types";
+import { NoteAttachment, NoteBlock, NoteFile, NoteFileType, NoteFolder, NotesData } from "@/lib/types";
 
 type MobilePane = "library" | "editor";
 type NameDialog = { kind: "create-folder" | "rename-folder" | "create-note"; targetId?: string };
 type DeleteTarget = { kind: "folder" | "note"; id: string; name: string };
-type EditorLine = { id: string; content: string; checked?: boolean; responsibleId?: string };
+type EditorLine = { id: string; content: string; checked?: boolean; responsibleId?: string; attachments?: NoteAttachment[] };
 type PendingFocus = { id: string; position: number } | null;
+type AttachmentTarget = { lineId: string; position?: number };
+type AttachmentMenu = AttachmentTarget & { x: number; y: number };
+
+function readAttachments(value: unknown): NoteAttachment[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((raw): NoteAttachment[] => {
+    if (!raw || typeof raw !== "object") return [];
+    const attachment = raw as Partial<NoteAttachment>;
+    if (typeof attachment.id !== "string" || (attachment.type !== "image" && attachment.type !== "comment")) return [];
+    if (attachment.type === "image" && (typeof attachment.dataUrl === "string" || typeof attachment.fileId === "string")) return [{ id: attachment.id, type: "image", name: typeof attachment.name === "string" ? attachment.name : "Imagem", ...(typeof attachment.dataUrl === "string" ? { dataUrl: attachment.dataUrl } : {}), ...(typeof attachment.fileId === "string" ? { fileId: attachment.fileId } : {}), ...(typeof attachment.mimeType === "string" ? { mimeType: attachment.mimeType } : {}), ...(typeof attachment.position === "number" ? { position: attachment.position } : {}) }];
+    if (attachment.type === "comment" && typeof attachment.comment === "string") return [{ id: attachment.id, type: "comment", comment: attachment.comment, ...(typeof attachment.position === "number" ? { position: attachment.position } : {}) }];
+    return [];
+  });
+}
 
 function newLine(content = "", checked?: boolean): EditorLine {
   return { id: window.crypto.randomUUID(), content, ...(checked === undefined ? {} : { checked }) };
@@ -27,7 +42,8 @@ function readBlocks(content: string): NoteBlock[] {
       if (!raw || typeof raw !== "object") return [];
       const block = raw as Partial<NoteBlock>;
       if (typeof block.id !== "string" || typeof block.type !== "string" || typeof block.content !== "string") return [];
-      return [{ id: block.id, type: block.type as NoteBlock["type"], content: block.content, ...(block.type === "checklist" ? { checked: Boolean(block.checked), ...(typeof block.responsibleId === "string" ? { responsibleId: block.responsibleId } : {}) } : {}) }];
+      const attachments = readAttachments(block.attachments);
+      return [{ id: block.id, type: block.type as NoteBlock["type"], content: block.content, ...(attachments.length ? { attachments } : {}), ...(block.type === "checklist" ? { checked: Boolean(block.checked), ...(typeof block.responsibleId === "string" ? { responsibleId: block.responsibleId } : {}) } : {}) }];
     });
   } catch {
     return [];
@@ -45,12 +61,18 @@ function blockAsPlainText(block: NoteBlock) {
 function linesForNote(note: NoteFile): EditorLine[] {
   const blocks = readBlocks(note.content);
   if (note.type === "checklist") {
-    const checklist = blocks.filter((block) => block.type === "checklist").map((block) => ({ id: block.id, content: block.content, checked: Boolean(block.checked), ...(block.responsibleId ? { responsibleId: block.responsibleId } : {}) }));
+    const checklist = blocks.filter((block) => block.type === "checklist").map((block) => ({ id: block.id, content: block.content, checked: Boolean(block.checked), ...(block.responsibleId ? { responsibleId: block.responsibleId } : {}), ...(block.attachments?.length ? { attachments: block.attachments } : {}) }));
     return checklist.length ? checklist : [newLine("", false)];
   }
-  return blocks.length
-    ? [{ id: blocks[0].id, content: blocks.map(blockAsPlainText).join("\n") }]
-    : [newLine()];
+  if (!blocks.length) return [newLine()];
+  const parts = blocks.map(blockAsPlainText);
+  let offset = 0;
+  const attachments = blocks.flatMap((block, index) => {
+    const adjusted = (block.attachments ?? []).map((attachment) => ({ ...attachment, position: offset + (attachment.position ?? 0) }));
+    offset += parts[index].length + (index < parts.length - 1 ? 1 : 0);
+    return adjusted;
+  });
+  return [{ id: blocks[0].id, content: parts.join("\n"), ...(attachments.length ? { attachments } : {}) }];
 }
 
 function formatUpdatedAt(value: string) {
@@ -82,6 +104,12 @@ export function NotesView() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [pendingFocus, setPendingFocus] = useState<PendingFocus>(null);
+  const [attachmentMenu, setAttachmentMenu] = useState<AttachmentMenu | null>(null);
+  const [commentTarget, setCommentTarget] = useState<AttachmentTarget | null>(null);
+  const [commentText, setCommentText] = useState("");
+  const [attachmentError, setAttachmentError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileTargetRef = useRef<AttachmentTarget | null>(null);
 
   const request = useCallback(async <T,>(url: string, init?: RequestInit) => {
     const response = await fetch(url, init);
@@ -128,6 +156,9 @@ export function NotesView() {
     setLines(linesForNote(selectedNote));
     setDirty(false);
     setSaveError("");
+    setAttachmentMenu(null);
+    setCommentTarget(null);
+    setAttachmentError("");
   }, [selectedNote]);
 
   useEffect(() => {
@@ -140,19 +171,41 @@ export function NotesView() {
     setPendingFocus(null);
   }, [lines, pendingFocus]);
 
-  const serializedContent = useCallback(() => {
+  const serializedContent = useCallback((sourceLines = lines) => {
     if (selectedNote?.type === "checklist") {
-      return JSON.stringify(lines.map((line) => ({ id: line.id, type: "checklist", content: line.content, checked: Boolean(line.checked), ...(line.responsibleId ? { responsibleId: line.responsibleId } : {}) })));
+      return JSON.stringify(sourceLines.map((line) => ({ id: line.id, type: "checklist", content: line.content, checked: Boolean(line.checked), ...(line.responsibleId ? { responsibleId: line.responsibleId } : {}), ...(line.attachments?.length ? { attachments: line.attachments } : {}) })));
     }
-    return JSON.stringify(lines.map((line) => ({ id: line.id, type: "text", content: line.content })));
+    return JSON.stringify(sourceLines.map((line) => ({ id: line.id, type: "text", content: line.content, ...(line.attachments?.length ? { attachments: line.attachments } : {}) })));
   }, [lines, selectedNote?.type]);
+
+  const uploadPendingAttachments = useCallback(async (sourceLines: EditorLine[]) => {
+    const uploadedLines: EditorLine[] = [];
+    for (const line of sourceLines) {
+      const attachments: NoteAttachment[] = [];
+      for (const attachment of line.attachments ?? []) {
+        if (attachment.type !== "image" || !attachment.dataUrl || attachment.fileId) {
+          attachments.push(attachment);
+          continue;
+        }
+        const blob = await fetch(attachment.dataUrl).then((response) => response.blob());
+        const formData = new FormData();
+        formData.set("file", new File([blob], attachment.name || "imagem", { type: blob.type }));
+        const uploaded = await request<{ fileId: string; name: string; mimeType: string }>("/api/notes/attachments", { method: "POST", body: formData });
+        attachments.push({ id: attachment.id, type: "image", fileId: uploaded.fileId, name: uploaded.name, mimeType: uploaded.mimeType, ...(typeof attachment.position === "number" ? { position: attachment.position } : {}) });
+      }
+      uploadedLines.push({ ...line, ...(attachments.length ? { attachments } : { attachments: undefined }) });
+    }
+    return uploadedLines;
+  }, [request]);
 
   const saveDraft = useCallback(async () => {
     if (!selectedNote || !dirty) return true;
     if (!draftTitle.trim()) { setSaveError("Informe o título da anotação."); return false; }
     setSaving(true); setSaveError("");
     try {
-      const content = serializedContent();
+      const uploadedLines = await uploadPendingAttachments(lines);
+      setLines(uploadedLines);
+      const content = serializedContent(uploadedLines);
       await request<{ ok: true }>(`/api/notes/${selectedNote.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: draftTitle.trim(), folderId: draftFolderId, content }),
@@ -168,7 +221,7 @@ export function NotesView() {
     } finally {
       setSaving(false);
     }
-  }, [dirty, draftFolderId, draftTitle, request, selectedNote, serializedContent]);
+  }, [dirty, draftFolderId, draftTitle, lines, request, selectedNote, serializedContent, uploadPendingAttachments]);
 
   useEffect(() => {
     const shortcut = (event: globalThis.KeyboardEvent) => {
@@ -239,6 +292,88 @@ export function NotesView() {
     setDirty(true);
   };
 
+  const updateTextContent = (id: string, content: string) => {
+    setLines((current) => current.map((line) => {
+      if (line.id !== id) return line;
+      const previous = line.content;
+      let prefix = 0;
+      while (prefix < previous.length && prefix < content.length && previous[prefix] === content[prefix]) prefix += 1;
+      let suffix = 0;
+      while (suffix < previous.length - prefix && suffix < content.length - prefix && previous[previous.length - 1 - suffix] === content[content.length - 1 - suffix]) suffix += 1;
+      const previousChangedEnd = previous.length - suffix;
+      const delta = content.length - previous.length;
+      const attachments = line.attachments?.map((attachment) => {
+        if (typeof attachment.position !== "number") return attachment;
+        if (attachment.position < prefix) return attachment;
+        if (attachment.position >= previousChangedEnd) return { ...attachment, position: Math.max(0, attachment.position + delta) };
+        return { ...attachment, position: Math.max(0, content.length - suffix) };
+      });
+      return { ...line, content, ...(attachments ? { attachments } : {}) };
+    }));
+    setDirty(true);
+  };
+
+  const addAttachment = (target: AttachmentTarget, attachment: NoteAttachment) => {
+    setLines((current) => current.map((line) => line.id === target.lineId
+      ? { ...line, attachments: [...(line.attachments ?? []), { ...attachment, ...(typeof target.position === "number" ? { position: target.position } : {}) }] }
+      : line));
+    setDirty(true);
+    setAttachmentError("");
+  };
+
+  const removeAttachment = (lineId: string, attachmentId: string) => {
+    setLines((current) => current.map((line) => line.id === lineId ? { ...line, attachments: line.attachments?.filter((attachment) => attachment.id !== attachmentId) } : line));
+    setDirty(true);
+  };
+
+  const openAttachmentMenu = (event: MouseEvent<HTMLElement>, target: AttachmentTarget) => {
+    event.preventDefault();
+    setAttachmentError("");
+    setAttachmentMenu({ ...target, x: Math.min(event.clientX, window.innerWidth - 205), y: Math.min(event.clientY, window.innerHeight - 115) });
+  };
+
+  const chooseImage = () => {
+    if (!attachmentMenu) return;
+    fileTargetRef.current = { lineId: attachmentMenu.lineId, ...(typeof attachmentMenu.position === "number" ? { position: attachmentMenu.position } : {}) };
+    setAttachmentMenu(null);
+    fileInputRef.current?.click();
+  };
+
+  const handleImageSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    const target = fileTargetRef.current;
+    event.target.value = "";
+    if (!file || !target) return;
+    if (!new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]).has(file.type)) { setAttachmentError("Use uma imagem PNG, JPEG, WebP ou GIF."); return; }
+    if (file.size > 1_500_000) { setAttachmentError("A imagem deve possuir no máximo 1,5 MB."); return; }
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error());
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      addAttachment(target, { id: window.crypto.randomUUID(), type: "image", name: file.name.slice(0, 180), dataUrl });
+    } catch {
+      setAttachmentError("Não foi possível ler a imagem selecionada.");
+    }
+  };
+
+  const openCommentDialog = () => {
+    if (!attachmentMenu) return;
+    setCommentTarget({ lineId: attachmentMenu.lineId, ...(typeof attachmentMenu.position === "number" ? { position: attachmentMenu.position } : {}) });
+    setCommentText("");
+    setAttachmentMenu(null);
+  };
+
+  const submitComment = (event: FormEvent) => {
+    event.preventDefault();
+    if (!commentTarget || !commentText.trim()) return;
+    addAttachment(commentTarget, { id: window.crypto.randomUUID(), type: "comment", comment: commentText.trim() });
+    setCommentTarget(null);
+    setCommentText("");
+  };
+
   const handleLineKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>, index: number) => {
     const current = lines[index];
     if (event.key === "Enter" && !event.shiftKey) {
@@ -255,7 +390,7 @@ export function NotesView() {
       event.preventDefault();
       const previous = lines[index - 1];
       const position = previous.content.length;
-      setLines((value) => value.filter((_, lineIndex) => lineIndex !== index).map((line, lineIndex) => lineIndex === index - 1 ? { ...line, content: `${line.content}${current.content}` } : line));
+      setLines((value) => value.filter((_, lineIndex) => lineIndex !== index).map((line, lineIndex) => lineIndex === index - 1 ? { ...line, content: `${line.content}${current.content}`, attachments: [...(line.attachments ?? []), ...(current.attachments ?? [])] } : line));
       setDirty(true);
       setPendingFocus({ id: previous.id, position });
     }
@@ -289,13 +424,21 @@ export function NotesView() {
 
             <div className={`notes-writing-area ${selectedNote.type}`}>
               {selectedNote.type === "checklist"
-                ? lines.map((line, index) => <div className={`notes-check-row ${line.checked ? "checked" : ""}`} key={line.id}><button type="button" onClick={() => updateLine(line.id, { checked: !line.checked })} aria-label={line.checked ? "Marcar como pendente" : "Marcar como concluído"}>{line.checked ? <CheckCircle2 size={20}/> : <Circle size={20}/>}</button><div className="notes-check-content"><textarea data-editor-id={line.id} rows={Math.max(1, line.content.split("\n").length)} value={line.content} onChange={(event) => updateLine(line.id, { content: event.target.value })} onKeyDown={(event) => handleLineKeyDown(event, index)} placeholder={index === 0 ? "Digite uma tarefa..." : "Próxima tarefa..."}/><label className={`notes-check-responsible ${line.responsibleId ? "assigned" : ""}`}><UserRound size={13}/><select aria-label={`Responsável por ${line.content || "esta tarefa"}`} value={line.responsibleId ?? ""} onChange={(event) => updateLine(line.id, { responsibleId: event.target.value || undefined })}><option value="">Escolher responsável</option>{users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label></div></div>)
-                : <textarea className="notes-notepad" value={lines[0]?.content ?? ""} onChange={(event) => updateLine(lines[0].id, { content: event.target.value })} placeholder="Comece a escrever..."/>}
+                ? lines.map((line, index) => <div className={`notes-check-row ${line.checked ? "checked" : ""}`} key={line.id}><button type="button" onClick={() => updateLine(line.id, { checked: !line.checked })} aria-label={line.checked ? "Marcar como pendente" : "Marcar como concluído"}>{line.checked ? <CheckCircle2 size={20}/> : <Circle size={20}/>}</button><div className="notes-check-content"><textarea data-editor-id={line.id} rows={Math.max(1, line.content.split("\n").length)} value={line.content} onChange={(event) => updateLine(line.id, { content: event.target.value })} onKeyDown={(event) => handleLineKeyDown(event, index)} placeholder={index === 0 ? "Digite uma tarefa..." : "Próxima tarefa..."}/><label className={`notes-check-responsible ${line.responsibleId ? "assigned" : ""}`}><UserRound size={13}/><select aria-label={`Responsável por ${line.content || "esta tarefa"}`} value={line.responsibleId ?? ""} onChange={(event) => updateLine(line.id, { responsibleId: event.target.value || undefined })}><option value="">Escolher responsável</option>{users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label><div className="notes-check-attachments">{line.attachments?.map((attachment) => <AttachmentBadge key={attachment.id} attachment={attachment} onRemove={() => removeAttachment(line.id, attachment.id)}/>) }<button type="button" className="notes-add-attachment" onClick={(event) => openAttachmentMenu(event, { lineId: line.id })} aria-label="Adicionar anexo à tarefa" title="Adicionar anexo"><Paperclip size={14}/></button></div></div></div>)
+                : lines[0] && <TextNotepad lineId={lines[0].id} content={lines[0].content} attachments={lines[0].attachments ?? []} onChange={(content) => updateTextContent(lines[0].id, content)} onAttachmentRequest={(event, lineId, position) => openAttachmentMenu(event, { lineId, position })} onRemoveAttachment={(attachmentId) => removeAttachment(lines[0].id, attachmentId)}/>}
             </div>
+            {selectedNote.type === "text" && <p className="notes-attachment-hint"><Paperclip size={12}/> Clique com o botão direito no ponto exato do texto para adicionar uma imagem ou comentário.</p>}
+            {attachmentError && <p className="notes-attachment-error">{attachmentError}</p>}
           </article></div>
         </>}
       </main>
     </div>
+
+    <input ref={fileInputRef} className="notes-hidden-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => void handleImageSelected(event)}/>
+
+    {attachmentMenu && <><button className="notes-attachment-menu-backdrop" onClick={() => setAttachmentMenu(null)} aria-label="Fechar menu de anexos"/><div className="notes-attachment-menu" style={{ left: attachmentMenu.x, top: attachmentMenu.y }} role="menu"><button type="button" onClick={chooseImage}><ImagePlus size={15}/><span><strong>Anexar imagem</strong><small>PNG, JPEG, WebP ou GIF</small></span></button><button type="button" onClick={openCommentDialog}><MessageSquarePlus size={15}/><span><strong>Adicionar comentário</strong><small>Texto exibido ao passar o mouse</small></span></button></div></>}
+
+    {commentTarget && <div className="modal-layer" role="dialog" aria-modal="true"><button className="modal-backdrop" onClick={() => setCommentTarget(null)} aria-label="Fechar"/><form className="small-modal notes-attachment-comment-modal" onSubmit={submitComment}><div className="modal-header"><div><span className="eyebrow">Anexo</span><h2>Novo comentário</h2><p>O comentário será exibido ao passar o mouse sobre o ícone.</p></div><button type="button" className="icon-button" onClick={() => setCommentTarget(null)} aria-label="Fechar"><X size={18}/></button></div><div className="modal-body"><label className="form-field"><span>Comentário</span><textarea autoFocus required maxLength={1000} rows={5} value={commentText} onChange={(event) => setCommentText(event.target.value)} placeholder="Digite o comentário..."/></label></div><div className="modal-footer"><button type="button" className="secondary-button" onClick={() => setCommentTarget(null)}>Cancelar</button><button className="primary-button" disabled={!commentText.trim()}>Adicionar</button></div></form></div>}
 
     {dialog && <div className="modal-layer" role="dialog" aria-modal="true">
       <button className="modal-backdrop" onClick={() => setDialog(null)} aria-label="Fechar"/>

@@ -133,12 +133,24 @@ export interface AppData {
 export type NoteFileType = "text" | "checklist";
 export type NoteBlockType = "text" | "heading" | "markdown" | "checklist" | "quote" | "code";
 
+export interface NoteAttachment {
+  id: string;
+  type: "image" | "comment";
+  name?: string;
+  dataUrl?: string;
+  fileId?: string;
+  mimeType?: string;
+  comment?: string;
+  position?: number;
+}
+
 export interface NoteBlock {
   id: string;
   type: NoteBlockType;
   content: string;
   checked?: boolean;
   responsibleId?: string;
+  attachments?: NoteAttachment[];
 }
 
 export interface NoteFolder {

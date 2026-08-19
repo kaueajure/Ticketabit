@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { execute, query, withTransaction } from "@/lib/db";
+import { attachmentFileIdsFromContent, deleteNoteAttachment, deleteNoteAttachments } from "@/lib/note-attachments";
 import { NoteFile, NoteFileType, NoteFolder, NotesData } from "@/lib/types";
 
 interface NoteFolderRow extends RowDataPacket, NoteFolder {}
@@ -29,12 +30,27 @@ function cleanType(value: string): NoteFileType {
 }
 
 function validateContent(content: string) {
-  if (Buffer.byteLength(content, "utf8") > 1_000_000) throw new Error("A anotação ultrapassou o limite de 1 MB.");
+  if (Buffer.byteLength(content, "utf8") > 10_000_000) throw new Error("A anotação ultrapassou o limite de 10 MB.");
   try {
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(content) as Array<{ attachments?: unknown }>;
     if (!Array.isArray(parsed)) throw new Error();
+    const attachments = parsed.flatMap((block) => Array.isArray(block?.attachments) ? block.attachments : []);
+    if (attachments.length > 40) throw new Error("Uma anotação pode ter no máximo 40 anexos.");
+    for (const raw of attachments) {
+      if (!raw || typeof raw !== "object") throw new Error("Existe um anexo inválido.");
+      const attachment = raw as Record<string, unknown>;
+      if (typeof attachment.id !== "string" || !attachment.id || (attachment.type !== "image" && attachment.type !== "comment")) throw new Error("Existe um anexo inválido.");
+      if (attachment.type === "comment") {
+        if (typeof attachment.comment !== "string" || !attachment.comment.trim() || attachment.comment.length > 1_000) throw new Error("O comentário do anexo deve possuir até 1.000 caracteres.");
+      } else {
+        if (typeof attachment.name !== "string" || !attachment.name || attachment.name.length > 180) throw new Error("O nome do anexo é inválido.");
+        if (typeof attachment.fileId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:png|jpg|webp|gif)$/i.test(attachment.fileId)) throw new Error("A imagem anexada ainda não foi enviada.");
+        if (typeof attachment.mimeType !== "string" || !new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]).has(attachment.mimeType)) throw new Error("O formato da imagem anexada é inválido.");
+      }
+      if (attachment.position !== undefined && (!Number.isInteger(attachment.position) || Number(attachment.position) < 0)) throw new Error("A posição do anexo é inválida.");
+    }
   } catch {
-    throw new Error("O conteúdo da anotação é inválido.");
+    throw new Error("O conteúdo ou algum anexo da anotação é inválido.");
   }
   return content;
 }
@@ -70,8 +86,10 @@ export async function updateNoteFolder(userId: string, id: string, rawName: stri
 }
 
 export async function deleteNoteFolder(userId: string, id: string) {
+  const notes = await query<RowDataPacket[]>("select content from notes where folder_id = ? and user_id = ?", [id, userId]);
   const result = await execute("delete from note_folders where id = ? and user_id = ?", [id, userId]);
   if (!result.affectedRows) throw new Error("Pasta não encontrada.");
+  await deleteNoteAttachments(userId, notes.map((note) => String(note.content))).catch((error) => console.error("Delete note folder attachments error", error));
 }
 
 export async function createNoteFile(userId: string, folderId: string, rawTitle: string, rawType: string) {
@@ -90,6 +108,7 @@ export async function updateNoteFile(userId: string, id: string, changes: { titl
   if (typeof changes.title === "string") entries.push({ column: "title", value: cleanName(changes.title, "o nome do arquivo", 180) });
   if (typeof changes.content === "string") entries.push({ column: "content", value: validateContent(changes.content) });
 
+  let removedFileIds: string[] = [];
   await withTransaction(async (connection) => {
     if (responsibleIds.length) {
       const [users] = await connection.execute<RowDataPacket[]>(`select id from users where active = 1 and id in (${responsibleIds.map(() => "?").join(", ")})`, responsibleIds);
@@ -100,6 +119,12 @@ export async function updateNoteFile(userId: string, id: string, changes: { titl
       if (!folders[0]) throw new Error("Pasta de destino não encontrada.");
       entries.push({ column: "folder_id", value: changes.folderId });
     }
+    if (typeof changes.content === "string") {
+      const [currentNotes] = await connection.execute<RowDataPacket[]>("select content from notes where id = ? and user_id = ? limit 1 for update", [id, userId]);
+      if (!currentNotes[0]) throw new Error("Arquivo não encontrado.");
+      const nextFileIds = new Set(attachmentFileIdsFromContent(changes.content));
+      removedFileIds = attachmentFileIdsFromContent(String(currentNotes[0].content)).filter((fileId) => !nextFileIds.has(fileId));
+    }
     if (!entries.length) throw new Error("Nenhuma alteração válida foi informada.");
     const [result] = await connection.execute<ResultSetHeader>(
       `update notes set ${entries.map((entry) => `${entry.column} = ?`).join(", ")} where id = ? and user_id = ?`,
@@ -107,9 +132,12 @@ export async function updateNoteFile(userId: string, id: string, changes: { titl
     );
     if (!result.affectedRows) throw new Error("Arquivo não encontrado.");
   });
+  await Promise.all(removedFileIds.map((fileId) => deleteNoteAttachment(userId, fileId))).catch((error) => console.error("Delete removed note attachments error", error));
 }
 
 export async function deleteNoteFile(userId: string, id: string) {
+  const notes = await query<RowDataPacket[]>("select content from notes where id = ? and user_id = ? limit 1", [id, userId]);
   const result = await execute("delete from notes where id = ? and user_id = ?", [id, userId]);
   if (!result.affectedRows) throw new Error("Arquivo não encontrado.");
+  if (notes[0]) await deleteNoteAttachments(userId, [String(notes[0].content)]).catch((error) => console.error("Delete note attachments error", error));
 }

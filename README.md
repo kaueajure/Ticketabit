@@ -39,9 +39,12 @@ DB_PASSWORD=senha_do_banco
 DB_NAME=nome_do_banco
 DB_SSL=false
 AUTH_SECRET=uma_chave_aleatoria_com_32_ou_mais_caracteres
+UPLOADS_DIR=../uploads
 ```
 
 Quando a aplicação e o banco estiverem na mesma conta Hostinger, o host normalmente é `localhost`. Para executar as migrations de uma máquina externa, habilite o IP da máquina em **Remote MySQL** e use o hostname mostrado pelo hPanel.
+
+`UPLOADS_DIR` deve apontar para a pasta `uploads` que fica no mesmo nível de `public_html`. Você também pode usar o caminho absoluto fornecido pela Hostinger, como `/home/SEU_USUARIO/uploads`. O processo Node.js precisa ter permissão de escrita nessa pasta. As imagens das anotações ficam em `uploads/notes/<id-do-usuário>` e, por estarem fora de `public_html`, não são removidas durante o deploy.
 
 Use os comandos de implantação:
 
@@ -64,7 +67,7 @@ O arquivo `database/schema.sql` contém as tabelas:
 - `ticket_responsibles`;
 - `ticket_history`;
 - `note_folders`;
-- `notes` (arquivos de texto e checklist com conteúdo em blocos).
+- `notes` (arquivos de texto e checklist com conteúdo em blocos e referências aos anexos persistentes).
 
 As senhas são armazenadas apenas como hash bcrypt. A autenticação gera uma sessão assinada em cookie `httpOnly`, `SameSite=Lax` e `Secure` em produção.
 Todos os usuários possuem as mesmas permissões no sistema.
