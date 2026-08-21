@@ -182,3 +182,65 @@ export async function getMovideskTicketSnapshot(ticketNumber: string): Promise<M
   if (!status) throw new MovideskHistoryError("O ticket do Movidesk não possui um status válido.", 422);
   return { ticketNumber, subject, status };
 }
+
+export async function getMovideskRecentTicketSnapshots(): Promise<{ snapshots: MovideskTicketSnapshot[]; truncated: boolean }> {
+  const token = process.env.MOVIDESK_API_TOKEN?.trim();
+  if (!token) throw new MovideskHistoryError("A integração com o Movidesk ainda não foi configurada.", 503);
+
+  const baseUrl = (process.env.MOVIDESK_API_URL?.trim() || "https://api.movidesk.com/public/v1").replace(/\/+$/, "");
+  const pageSize = 1_000;
+  const maximumPages = 8;
+  const snapshots = new Map<string, MovideskTicketSnapshot>();
+  let truncated = false;
+
+  for (let page = 0; page < maximumPages; page += 1) {
+    const url = new URL(`${baseUrl}/tickets`);
+    url.searchParams.set("token", token);
+    url.searchParams.set("$select", "id,subject,status");
+    url.searchParams.set("$orderby", "id desc");
+    url.searchParams.set("$top", String(pageSize));
+    url.searchParams.set("$skip", String(page * pageSize));
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(20_000),
+      });
+    } catch (error) {
+      const timedOut = error instanceof DOMException && error.name === "TimeoutError";
+      throw new MovideskHistoryError(timedOut ? "O Movidesk demorou demais para responder." : "Não foi possível conectar à API do Movidesk.", 502);
+    }
+
+    if (response.status === 401 || response.status === 403) throw new MovideskHistoryError("O token da API do Movidesk não foi aceito.", 502);
+    if (response.status === 429) {
+      const retryAfter = Number(response.headers.get("retry-after"));
+      throw new MovideskHistoryError(Number.isFinite(retryAfter) && retryAfter > 0
+        ? `O limite do Movidesk foi atingido. Tente novamente em ${retryAfter} segundos.`
+        : "O limite de consultas do Movidesk foi atingido. Aguarde um minuto e tente novamente.", 429);
+    }
+    if (!response.ok) throw new MovideskHistoryError("O Movidesk não conseguiu retornar a lista de tickets.", 502);
+
+    const body = await response.text();
+    let result: unknown;
+    try {
+      result = JSON.parse(body) as unknown;
+    } catch {
+      throw new MovideskHistoryError("O Movidesk retornou uma lista inválida.", 502);
+    }
+    if (!Array.isArray(result)) throw new MovideskHistoryError("O Movidesk retornou uma lista inválida.", 502);
+
+    for (const raw of result as MovideskTicketHistoryResponse[]) {
+      const ticketNumber = String(raw.id ?? "").trim();
+      const subject = text(raw.subject);
+      const status = text(raw.status);
+      if (ticketNumber && subject && status) snapshots.set(ticketNumber, { ticketNumber, subject, status });
+    }
+
+    if (result.length < pageSize) break;
+    if (page === maximumPages - 1) truncated = true;
+  }
+
+  return { snapshots: [...snapshots.values()], truncated };
+}

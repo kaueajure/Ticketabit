@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Check, ChevronDown, Download, Filter, Search, SlidersHorizontal, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronDown, Download, Filter, RefreshCw, Search, SlidersHorizontal, Upload } from "lucide-react";
 import { useApp } from "@/components/providers/app-provider";
-import { Ticket, TicketStatus } from "@/lib/types";
+import { MovideskBulkSyncResult, Ticket, TicketStatus } from "@/lib/types";
+import { readApiJson } from "@/lib/client-http";
 import { formatDate } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
 import { CategoryBadge, StatusBadge } from "@/components/ui/status-badge";
@@ -14,7 +15,7 @@ type SortDirection = "asc" | "desc";
 const EXECUTION_FILTER = "__execution__";
 
 export function TicketsView() {
-  const { tickets, systems, categories, statuses, users, globalSearch, setGlobalSearch, updateTicket, openTicket } = useApp();
+  const { tickets, systems, categories, statuses, users, globalSearch, setGlobalSearch, updateTicket, openTicket, reloadData, showNotice } = useApp();
   const [status, setStatus] = useState(EXECUTION_FILTER);
   const [system, setSystem] = useState("");
   const [category, setCategory] = useState("");
@@ -25,6 +26,7 @@ export function TicketsView() {
   const [savedCell, setSavedCell] = useState("");
   const [mobileFilters, setMobileFilters] = useState(false);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
+  const [syncingMovidesk, setSyncingMovidesk] = useState(false);
 
   const statusCounts = useMemo(() => new Map(statuses.map((configuredStatus) => [
     configuredStatus.name,
@@ -86,6 +88,29 @@ export function TicketsView() {
     link.href = url; link.download = `ticketabit-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(url);
   };
 
+  const syncMovidesk = async () => {
+    setSyncingMovidesk(true);
+    try {
+      const response = await fetch("/api/tickets/movidesk-sync", {
+        method: "POST",
+        signal: AbortSignal.timeout(60_000),
+      });
+      const result = await readApiJson<MovideskBulkSyncResult & { error?: string }>(response);
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível sincronizar os tickets.");
+      await reloadData();
+      const message = result.updated
+        ? `${result.updated} ${result.updated === 1 ? "status atualizado" : "status atualizados"} pelo Movidesk.`
+        : `${result.matched} ${result.matched === 1 ? "ticket conferido" : "tickets conferidos"}; nenhuma alteração encontrada.`;
+      showNotice(result.unmappedStatuses.length ? `${message} ${result.unmappedStatuses.length} status sem correspondência.` : message);
+    } catch (error) {
+      showNotice(error instanceof DOMException && error.name === "TimeoutError"
+        ? "A sincronização demorou demais. Tente novamente."
+        : error instanceof Error ? error.message : "Não foi possível sincronizar os tickets.");
+    } finally {
+      setSyncingMovidesk(false);
+    }
+  };
+
   const SortIcon = ({ column }: { column: SortKey }) => sortKey !== column ? <span className="sort-idle">↕</span> : sortDirection === "asc" ? <ArrowUp size={13} /> : <ArrowDown size={13} />;
 
   return (
@@ -100,7 +125,7 @@ export function TicketsView() {
             </button>
           ))}
         </div>
-        <div className="tickets-workspace-actions"><button className="secondary-button" onClick={() => setCsvImportOpen(true)}><Upload size={15} /><span>Importar</span></button><button className="secondary-button" onClick={exportCsv}><Download size={15} /><span>Exportar</span></button></div>
+        <div className="tickets-workspace-actions"><button className="secondary-button ticket-sync-button" onClick={() => void syncMovidesk()} disabled={syncingMovidesk} aria-label="Sincronizar todos os tickets com o Movidesk"><RefreshCw className={syncingMovidesk ? "spin" : ""} size={15}/><span>{syncingMovidesk ? "Sincronizando..." : "Sincronizar"}</span></button><button className="secondary-button" onClick={() => setCsvImportOpen(true)}><Upload size={15} /><span>Importar</span></button><button className="secondary-button" onClick={exportCsv}><Download size={15} /><span>Exportar</span></button></div>
       </header>
       <div className="table-card">
         <div className="table-toolbar">

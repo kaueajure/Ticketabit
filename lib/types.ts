@@ -78,6 +78,17 @@ export interface MovideskTicketSyncResult {
   warnings: string[];
 }
 
+export interface MovideskBulkSyncResult {
+  checked: number;
+  matched: number;
+  updated: number;
+  unchanged: number;
+  notReturned: number;
+  changedStatuses: number;
+  unmappedStatuses: string[];
+  truncated: boolean;
+}
+
 export interface Ticket {
   id: string;
   ticketNumber: string;
