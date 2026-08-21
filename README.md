@@ -53,6 +53,10 @@ Build: npm run build
 Start: npm run start
 ```
 
+O build gera um identificador exclusivo para cada versão. Assim, o Next.js consegue detectar uma navegação iniciada em uma versão anterior e evita manter referências a arquivos JavaScript que já foram substituídos. Se a plataforma fornecer um identificador próprio, ele pode ser definido em `NEXT_DEPLOYMENT_ID`.
+
+O processo correto de implantação é concluir o build e só então reiniciar o processo Node.js. Não remova a pasta `.next` enquanto a versão anterior ainda estiver atendendo requisições.
+
 Execute `npm run db:migrate` em um ambiente com acesso ao banco. Nenhum usuário ou credencial é criado automaticamente pelo código.
 
 ## Estrutura de dados

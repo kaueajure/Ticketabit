@@ -43,7 +43,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (pathname === "/login") return <>{children}</>;
 
   if (loading || !currentUser) {
-    return <div className="app-loading"><BrandLogo />{loadError ? <><h1>Não foi possível carregar o Ticketabit</h1><p>{loadError}</p><button className="primary-button" onClick={() => void reloadData()}>Tentar novamente</button></> : <><i/><p>Conectando ao banco de dados...</p></>}</div>;
+    return <div className="app-loading"><BrandLogo />{loadError ? <><h1>Não foi possível carregar o Ticketabit</h1><p>{loadError}</p><button className="primary-button" onClick={() => void reloadData()}>Tentar novamente</button></> : <><i/><p>Carregando o Ticketabit...</p></>}</div>;
   }
 
   return (

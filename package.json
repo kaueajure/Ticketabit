@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/build-next.mjs",
     "start": "next start",
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs"
   },

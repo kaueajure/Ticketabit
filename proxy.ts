@@ -20,6 +20,11 @@ function requestOrigin(request: NextRequest) {
 }
 
 export function proxy(request: NextRequest) {
+  if (request.nextUrl.pathname === "/entrar") {
+    const destination = request.cookies.has(SESSION_COOKIE) ? "/" : "/login";
+    return preventPageCaching(NextResponse.redirect(new URL(destination, requestOrigin(request)), 307));
+  }
+
   if (!request.cookies.has(SESSION_COOKIE) && request.nextUrl.pathname !== "/login") {
     const next = `${request.nextUrl.pathname}${request.nextUrl.search}`;
     const loginUrl = new URL("/login", requestOrigin(request));
