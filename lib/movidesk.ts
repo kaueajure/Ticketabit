@@ -209,7 +209,11 @@ export async function getMovideskTicketsForUsers(users: MovideskSyncUser[]): Pro
     const url = new URL(`${baseUrl}${task.path}`);
     url.searchParams.set("token", token);
     url.searchParams.set("$select", "id,subject,status,category,serviceFirstLevel,serviceSecondLevel,serviceThirdLevel,createdDate,resolvedIn,closedIn");
-    url.searchParams.set("$filter", `owner/id eq '${task.user.email.replaceAll("'", "''")}'`);
+    // O ID do responsável no Movidesk é o código de referência da pessoa e
+    // normalmente não corresponde ao e-mail salvo no Ticketabit. O objeto
+    // owner expõe o e-mail oficial, que é o vínculo configurado entre os dois
+    // sistemas.
+    url.searchParams.set("$filter", `owner/email eq '${task.user.email.replaceAll("'", "''")}'`);
     url.searchParams.set("$orderby", "id desc");
     url.searchParams.set("$top", String(pageSize));
     url.searchParams.set("$skip", String(task.page * pageSize));
