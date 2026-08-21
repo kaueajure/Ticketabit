@@ -67,6 +67,20 @@ export interface MovideskTicketSnapshot {
   status: string;
 }
 
+export interface MovideskSyncUser {
+  id: string;
+  email: string;
+}
+
+export interface MovideskTicketImportSnapshot extends MovideskTicketSnapshot {
+  category: string;
+  serviceLevels: string[];
+  createdAt: string;
+  resolvedAt: string;
+  closedAt: string;
+  responsibleIds: string[];
+}
+
 export interface MovideskTicketSyncResult {
   ticket: {
     id: string;
@@ -79,13 +93,18 @@ export interface MovideskTicketSyncResult {
 }
 
 export interface MovideskBulkSyncResult {
+  usersChecked: number;
   checked: number;
   matched: number;
+  imported: number;
   updated: number;
   unchanged: number;
   notReturned: number;
+  skipped: number;
   changedStatuses: number;
   unmappedStatuses: string[];
+  unmappedSystems: string[];
+  unmappedCategories: string[];
   truncated: boolean;
 }
 

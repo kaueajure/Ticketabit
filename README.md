@@ -83,3 +83,7 @@ EXTENSION_DEFAULT_STATUS=Não iniciado
 ```
 
 A chave já corresponde à versão interna da extensão. O usuário configura somente o próprio e-mail; sistemas, categorias e status ativos são carregados pela API e exibidos como opções reais. Antes da criação, o número é consultado. Quando ele já existe, a extensão mantém o mesmo registro e pode substituir somente o status, registrando a alteração no histórico.
+
+## Sincronização com o Movidesk
+
+O botão **Sincronizar** da tela de tickets consulta o Movidesk usando o e-mail de cada usuário ativo do Ticketabit como responsável. A consulta inclui tickets recentes e históricos: registros novos são importados quando serviço/sistema, categoria e status possuem correspondência ativa; registros existentes mantêm todos os seus dados e recebem somente a atualização de status. Configure `MOVIDESK_API_TOKEN` e, se necessário, `MOVIDESK_API_URL` no ambiente do servidor.

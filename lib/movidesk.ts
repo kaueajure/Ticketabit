@@ -1,6 +1,6 @@
 import "server-only";
 
-import { MovideskTicketSnapshot, OfficialHistoryEvent, OfficialHistoryEventKind, OfficialTicketHistory } from "@/lib/types";
+import { MovideskSyncUser, MovideskTicketImportSnapshot, MovideskTicketSnapshot, OfficialHistoryEvent, OfficialHistoryEventKind, OfficialTicketHistory } from "@/lib/types";
 
 interface MovideskPerson {
   businessName?: unknown;
@@ -24,6 +24,10 @@ interface MovideskTicketHistoryResponse {
   id?: unknown;
   subject?: unknown;
   status?: unknown;
+  category?: unknown;
+  serviceFirstLevel?: unknown;
+  serviceSecondLevel?: unknown;
+  serviceThirdLevel?: unknown;
   createdDate?: unknown;
   lastActionDate?: unknown;
   actionCount?: unknown;
@@ -183,23 +187,32 @@ export async function getMovideskTicketSnapshot(ticketNumber: string): Promise<M
   return { ticketNumber, subject, status };
 }
 
-export async function getMovideskRecentTicketSnapshots(): Promise<{ snapshots: MovideskTicketSnapshot[]; truncated: boolean }> {
+export async function getMovideskTicketsForUsers(users: MovideskSyncUser[]): Promise<{ snapshots: MovideskTicketImportSnapshot[]; truncated: boolean }> {
   const token = process.env.MOVIDESK_API_TOKEN?.trim();
   if (!token) throw new MovideskHistoryError("A integração com o Movidesk ainda não foi configurada.", 503);
+  if (!users.length) return { snapshots: [], truncated: false };
 
   const baseUrl = (process.env.MOVIDESK_API_URL?.trim() || "https://api.movidesk.com/public/v1").replace(/\/+$/, "");
   const pageSize = 1_000;
-  const maximumPages = 8;
-  const snapshots = new Map<string, MovideskTicketSnapshot>();
-  let truncated = false;
+  const maximumRequests = 10;
+  const snapshots = new Map<string, MovideskTicketImportSnapshot>();
+  const pending = [
+    ...users.map((user) => ({ user, page: 0, path: "/tickets" })),
+    ...users.map((user) => ({ user, page: 0, path: "/tickets/past" })),
+  ];
+  let requests = 0;
 
-  for (let page = 0; page < maximumPages; page += 1) {
-    const url = new URL(`${baseUrl}/tickets`);
+  while (pending.length && requests < maximumRequests) {
+    const task = pending.shift();
+    if (!task) break;
+    requests += 1;
+    const url = new URL(`${baseUrl}${task.path}`);
     url.searchParams.set("token", token);
-    url.searchParams.set("$select", "id,subject,status");
+    url.searchParams.set("$select", "id,subject,status,category,serviceFirstLevel,serviceSecondLevel,serviceThirdLevel,createdDate,resolvedIn,closedIn");
+    url.searchParams.set("$filter", `owner/id eq '${task.user.email.replaceAll("'", "''")}'`);
     url.searchParams.set("$orderby", "id desc");
     url.searchParams.set("$top", String(pageSize));
-    url.searchParams.set("$skip", String(page * pageSize));
+    url.searchParams.set("$skip", String(task.page * pageSize));
 
     let response: Response;
     try {
@@ -235,12 +248,25 @@ export async function getMovideskRecentTicketSnapshots(): Promise<{ snapshots: M
       const ticketNumber = String(raw.id ?? "").trim();
       const subject = text(raw.subject);
       const status = text(raw.status);
-      if (ticketNumber && subject && status) snapshots.set(ticketNumber, { ticketNumber, subject, status });
+      const category = text(raw.category);
+      const serviceLevels = [text(raw.serviceFirstLevel), text(raw.serviceSecondLevel), text(raw.serviceThirdLevel)].filter(Boolean);
+      if (!ticketNumber || !subject || !status) continue;
+      const previous = snapshots.get(ticketNumber);
+      snapshots.set(ticketNumber, {
+        ticketNumber,
+        subject,
+        status,
+        category,
+        serviceLevels,
+        createdAt: date(raw.createdDate),
+        resolvedAt: date(raw.resolvedIn),
+        closedAt: date(raw.closedIn),
+        responsibleIds: [...new Set([...(previous?.responsibleIds ?? []), task.user.id])],
+      });
     }
 
-    if (result.length < pageSize) break;
-    if (page === maximumPages - 1) truncated = true;
+    if (result.length >= pageSize) pending.push({ user: task.user, page: task.page + 1, path: task.path });
   }
 
-  return { snapshots: [...snapshots.values()], truncated };
+  return { snapshots: [...snapshots.values()], truncated: pending.length > 0 };
 }

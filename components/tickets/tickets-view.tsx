@@ -98,10 +98,24 @@ export function TicketsView() {
       const result = await readApiJson<MovideskBulkSyncResult & { error?: string }>(response);
       if (!response.ok) throw new Error(result.error ?? "Não foi possível sincronizar os tickets.");
       await reloadData();
-      const message = result.updated
-        ? `${result.updated} ${result.updated === 1 ? "status atualizado" : "status atualizados"} pelo Movidesk.`
-        : `${result.matched} ${result.matched === 1 ? "ticket conferido" : "tickets conferidos"}; nenhuma alteração encontrada.`;
-      showNotice(result.unmappedStatuses.length ? `${message} ${result.unmappedStatuses.length} status sem correspondência.` : message);
+      const changes = [
+        result.imported ? `${result.imported} ${result.imported === 1 ? "ticket importado" : "tickets importados"}` : "",
+        result.updated ? `${result.updated} ${result.updated === 1 ? "status atualizado" : "status atualizados"}` : "",
+      ].filter(Boolean);
+      const message = changes.length
+        ? `${changes.join(" e ")} pelo Movidesk.`
+        : `${result.checked} ${result.checked === 1 ? "ticket conferido" : "tickets conferidos"} para ${result.usersChecked} ${result.usersChecked === 1 ? "usuário" : "usuários"}; nenhuma alteração encontrada.`;
+      const unmapped = [
+        result.unmappedStatuses.length ? `${result.unmappedStatuses.length} status` : "",
+        result.unmappedSystems.length ? `${result.unmappedSystems.length} ${result.unmappedSystems.length === 1 ? "sistema" : "sistemas"}` : "",
+        result.unmappedCategories.length ? `${result.unmappedCategories.length} ${result.unmappedCategories.length === 1 ? "categoria" : "categorias"}` : "",
+      ].filter(Boolean);
+      const warnings = [
+        result.skipped ? `${result.skipped} ${result.skipped === 1 ? "ticket novo foi ignorado por não ter correspondência nas configurações" : "tickets novos foram ignorados por não terem correspondência nas configurações"}.` : "",
+        unmapped.length ? `Sem correspondência: ${unmapped.join(", ")}.` : "",
+        result.truncated ? "A consulta atingiu o limite de segurança da API." : "",
+      ].filter(Boolean);
+      showNotice([message, ...warnings].join(" "));
     } catch (error) {
       showNotice(error instanceof DOMException && error.name === "TimeoutError"
         ? "A sincronização demorou demais. Tente novamente."

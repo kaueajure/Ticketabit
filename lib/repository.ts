@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { RowDataPacket } from "mysql2/promise";
 import { execute, query, withTransaction } from "@/lib/db";
-import { AppData, Category, ExtensionTicketInput, ExtensionTicketResult, ExtensionTicketStatusInput, ExtensionTicketStatusResult, HistoryEntry, MovideskBulkSyncResult, MovideskTicketSnapshot, MovideskTicketSyncResult, StatusDefinition, SystemItem, Ticket, TicketImportError, TicketImportRow, TicketInput, User } from "@/lib/types";
+import { AppData, Category, ExtensionTicketInput, ExtensionTicketResult, ExtensionTicketStatusInput, ExtensionTicketStatusResult, HistoryEntry, MovideskBulkSyncResult, MovideskSyncUser, MovideskTicketImportSnapshot, MovideskTicketSnapshot, MovideskTicketSyncResult, StatusDefinition, SystemItem, Ticket, TicketImportError, TicketImportRow, TicketInput, User } from "@/lib/types";
 
 interface SystemRow extends RowDataPacket, Omit<SystemItem, "active"> { active: boolean | number; }
 interface CategoryRow extends RowDataPacket, Omit<Category, "active"> { active: boolean | number; }
@@ -105,6 +105,40 @@ function findMatchingStatus(statusRows: RowDataPacket[], status: string) {
     ?? statusRows.find((row) => normalizedStatusLookupValue(String(row.name)) === normalizedStatusLookupValue(status));
 }
 
+function findMatchingSystem(systemRows: RowDataPacket[], serviceLevels: string[]) {
+  const candidates = serviceLevels.filter(Boolean).reverse();
+  for (const candidate of candidates) {
+    const requested = normalizedLookupValue(candidate);
+    const exact = systemRows.find((row) => normalizedLookupValue(String(row.name)) === requested);
+    if (exact) return exact;
+  }
+  for (const candidate of candidates) {
+    const requested = normalizedLookupValue(candidate);
+    const matches = systemRows.filter((row) => {
+      const configured = normalizedLookupValue(String(row.name));
+      return configured.includes(requested) || requested.includes(configured);
+    });
+    if (matches.length === 1) return matches[0];
+  }
+  return undefined;
+}
+
+function movideskDateInSaoPaulo(value: string) {
+  if (!value || !Number.isFinite(new Date(value).getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function batches<T>(items: T[], size = 500) {
+  return Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, (index + 1) * size));
+}
+
 export class ExtensionTicketValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -152,6 +186,11 @@ export async function getTicketNumberById(id: string) {
   return rows[0] ? String(rows[0].ticketNumber) : null;
 }
 
+export async function getMovideskSyncUsers(): Promise<MovideskSyncUser[]> {
+  const rows = await query<RowDataPacket[]>("select id, email from users where active = true and email is not null and trim(email) <> '' order by name");
+  return rows.map((row) => ({ id: String(row.id), email: String(row.email).trim().toLowerCase() }));
+}
+
 export async function syncTicketFromMovidesk(id: string, snapshot: MovideskTicketSnapshot, user: User): Promise<MovideskTicketSyncResult> {
   return withTransaction(async (connection) => {
     const [ticketRows] = await connection.execute<RowDataPacket[]>(
@@ -191,58 +230,142 @@ export async function syncTicketFromMovidesk(id: string, snapshot: MovideskTicke
   });
 }
 
-export async function syncTicketsFromMovidesk(snapshots: MovideskTicketSnapshot[], user: User, truncated = false): Promise<MovideskBulkSyncResult> {
+export async function syncTicketsFromMovidesk(snapshots: MovideskTicketImportSnapshot[], syncUsers: MovideskSyncUser[], user: User, truncated = false): Promise<MovideskBulkSyncResult> {
   const snapshotsByNumber = new Map(snapshots.map((snapshot) => [snapshot.ticketNumber, snapshot]));
 
   return withTransaction(async (connection) => {
     const [ticketRows] = await connection.execute<RowDataPacket[]>(
       "select id, ticket_number as ticketNumber, status from tickets for update",
     );
-    const [statusRows] = await connection.execute<RowDataPacket[]>("select name from statuses where active = true order by position, name");
+    const [systemRows] = await connection.execute<RowDataPacket[]>("select id, name from systems where active = true order by name");
+    const [categoryRows] = await connection.execute<RowDataPacket[]>("select id, name from categories where active = true order by name");
+    const [statusRows] = await connection.execute<RowDataPacket[]>("select name, is_final as isFinal from statuses where active = true order by position, name");
+    const [activeUserRows] = await connection.execute<RowDataPacket[]>("select id from users where active = true");
+    const activeUserIds = new Set(activeUserRows.map((row) => String(row.id)));
+    const ticketsByNumber = new Map<string, RowDataPacket[]>();
+    for (const ticket of ticketRows) {
+      const ticketNumber = String(ticket.ticketNumber);
+      ticketsByNumber.set(ticketNumber, [...(ticketsByNumber.get(ticketNumber) ?? []), ticket]);
+    }
     const unmappedStatuses = new Set<string>();
+    const unmappedSystems = new Set<string>();
+    const unmappedCategories = new Set<string>();
     const historyRows: Array<[string, string, string, string, string, string]> = [];
+    const newTickets: Array<{
+      id: string;
+      ticketNumber: string;
+      systemId: string;
+      status: string;
+      categoryId: string;
+      description: string;
+      responsibleIds: string[];
+      receivedAt: string;
+      finishedAt: string | null;
+    }> = [];
     let matched = 0;
+    let imported = 0;
     let updated = 0;
     let changedStatuses = 0;
+    let changedExistingTickets = 0;
+    let skipped = 0;
 
-    for (const ticket of ticketRows) {
-      const snapshot = snapshotsByNumber.get(String(ticket.ticketNumber));
-      if (!snapshot) continue;
-      matched += 1;
-
+    for (const snapshot of snapshotsByNumber.values()) {
+      const existingTickets = ticketsByNumber.get(snapshot.ticketNumber) ?? [];
+      if (existingTickets.length) matched += 1;
       const matchingStatus = findMatchingStatus(statusRows, snapshot.status);
       if (!matchingStatus) {
         unmappedStatuses.add(snapshot.status);
+        if (!existingTickets.length) skipped += 1;
         continue;
       }
-      const previousStatus = String(ticket.status);
       const nextStatus = String(matchingStatus.name);
-      if (previousStatus === nextStatus) continue;
+      if (existingTickets.length) {
+        let snapshotUpdated = false;
+        for (const ticket of existingTickets) {
+          const previousStatus = String(ticket.status);
+          if (previousStatus === nextStatus) continue;
+          await connection.execute(
+            "update tickets set status = ?, updated_by = ? where id = ?",
+            [nextStatus, user.id, ticket.id],
+          );
+          updated += 1;
+          changedStatuses += 1;
+          snapshotUpdated = true;
+          historyRows.push([randomUUID(), String(ticket.id), user.id, "Status (sincronização Movidesk)", previousStatus, nextStatus]);
+        }
+        if (snapshotUpdated) changedExistingTickets += 1;
+        continue;
+      }
 
-      await connection.execute(
-        "update tickets set status = ?, updated_by = ? where id = ?",
-        [nextStatus, user.id, ticket.id],
-      );
-      updated += 1;
-      changedStatuses += 1;
-      historyRows.push([randomUUID(), String(ticket.id), user.id, "Status (sincronização Movidesk)", previousStatus, nextStatus]);
+      const system = findMatchingSystem(systemRows, snapshot.serviceLevels);
+      const category = categoryRows.find((row) => normalizedLookupValue(String(row.name)) === normalizedLookupValue(snapshot.category));
+      const responsibleIds = [...new Set(snapshot.responsibleIds)].filter((id) => activeUserIds.has(id));
+      const receivedAt = movideskDateInSaoPaulo(snapshot.createdAt);
+      if (!system) unmappedSystems.add(snapshot.serviceLevels.join(" › ") || "Serviço não informado");
+      if (!category) unmappedCategories.add(snapshot.category || "Categoria não informada");
+      if (!system || !category || !responsibleIds.length || !receivedAt) {
+        skipped += 1;
+        continue;
+      }
+
+      const id = randomUUID();
+      const finishedAt = Boolean(matchingStatus.isFinal)
+        ? movideskDateInSaoPaulo(snapshot.closedAt || snapshot.resolvedAt) || null
+        : null;
+      newTickets.push({
+        id,
+        ticketNumber: snapshot.ticketNumber,
+        systemId: String(system.id),
+        status: nextStatus,
+        categoryId: String(category.id),
+        description: snapshot.subject,
+        responsibleIds,
+        receivedAt,
+        finishedAt,
+      });
+      imported += 1;
+    }
+
+    if (newTickets.length) {
+      for (const ticketBatch of batches(newTickets)) {
+        await connection.execute(
+          `insert into tickets (id, ticket_number, system_id, status, category_id, description, responsible_id, received_at, finished_at, created_by, updated_by) values ${ticketBatch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ")}`,
+          ticketBatch.flatMap((ticket) => [ticket.id, ticket.ticketNumber, ticket.systemId, ticket.status, ticket.categoryId, ticket.description, ticket.responsibleIds[0], ticket.receivedAt, ticket.finishedAt, user.id, user.id]),
+        );
+        const responsiblePairs = ticketBatch.flatMap((ticket) => ticket.responsibleIds.map((responsibleId) => [ticket.id, responsibleId]));
+        await connection.execute(
+          `insert into ticket_responsibles (ticket_id, user_id) values ${responsiblePairs.map(() => "(?, ?)").join(", ")}`,
+          responsiblePairs.flat(),
+        );
+        await connection.execute(
+          `insert into ticket_history (id, ticket_id, user_id, field, new_value) values ${ticketBatch.map(() => "(?, ?, ?, 'Ticket', 'Ticket importado do Movidesk')").join(", ")}`,
+          ticketBatch.flatMap((ticket) => [randomUUID(), ticket.id, user.id]),
+        );
+      }
     }
 
     if (historyRows.length) {
-      await connection.execute(
-        `insert into ticket_history (id, ticket_id, user_id, field, previous_value, new_value) values ${historyRows.map(() => "(?, ?, ?, ?, ?, ?)").join(", ")}`,
-        historyRows.flat(),
-      );
+      for (const historyBatch of batches(historyRows)) {
+        await connection.execute(
+          `insert into ticket_history (id, ticket_id, user_id, field, previous_value, new_value) values ${historyBatch.map(() => "(?, ?, ?, ?, ?, ?)").join(", ")}`,
+          historyBatch.flat(),
+        );
+      }
     }
 
     return {
+      usersChecked: syncUsers.length,
       checked: snapshots.length,
       matched,
+      imported,
       updated,
-      unchanged: matched - updated,
-      notReturned: ticketRows.length - matched,
+      unchanged: matched - changedExistingTickets,
+      notReturned: ticketsByNumber.size - matched,
+      skipped,
       changedStatuses,
       unmappedStatuses: [...unmappedStatuses].sort((first, second) => first.localeCompare(second, "pt-BR")),
+      unmappedSystems: [...unmappedSystems].sort((first, second) => first.localeCompare(second, "pt-BR")),
+      unmappedCategories: [...unmappedCategories].sort((first, second) => first.localeCompare(second, "pt-BR")),
       truncated,
     };
   });

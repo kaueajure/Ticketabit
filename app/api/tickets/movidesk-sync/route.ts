@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { getMovideskRecentTicketSnapshots, MovideskHistoryError } from "@/lib/movidesk";
-import { syncTicketsFromMovidesk } from "@/lib/repository";
+import { getMovideskTicketsForUsers, MovideskHistoryError } from "@/lib/movidesk";
+import { getMovideskSyncUsers, syncTicketsFromMovidesk } from "@/lib/repository";
 
 export async function POST() {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
 
-    const { snapshots, truncated } = await getMovideskRecentTicketSnapshots();
-    return NextResponse.json(await syncTicketsFromMovidesk(snapshots, user, truncated));
+    const syncUsers = await getMovideskSyncUsers();
+    if (!syncUsers.length) return NextResponse.json({ error: "Nenhum usuário ativo possui e-mail para consultar no Movidesk." }, { status: 422 });
+
+    const { snapshots, truncated } = await getMovideskTicketsForUsers(syncUsers);
+    return NextResponse.json(await syncTicketsFromMovidesk(snapshots, syncUsers, user, truncated));
   } catch (error) {
     if (error instanceof MovideskHistoryError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
